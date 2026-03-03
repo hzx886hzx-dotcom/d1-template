@@ -369,8 +369,8 @@ export async function validateAndConsumeCode(
       now
     ),
     db.prepare(
-      "INSERT INTO device_activations (device_id, activation_code, activated_at, expires_at, is_active, renewal_count) VALUES (?, ?, ?, ?, 1, 0)"
-    ).bind(currentDeviceId, code, now, computedExpireAt),
+      "INSERT INTO device_activations (device_id, activation_code, activated_at, expires_at, is_active, renewal_count, use_count, updated_at) VALUES (?, ?, ?, ?, 1, 0, 1, ?)"
+    ).bind(currentDeviceId, code, now, computedExpireAt, now),
   ]);
 
   const updated = batchResult[0];
