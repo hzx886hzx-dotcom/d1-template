@@ -1,4 +1,5 @@
 ﻿import { sm4 } from "sm-crypto";
+import { renderAdminPage, renderLoginPage } from "./renderHtml";
 
 type Json = Record<string, unknown>;
 type StrategyPayload = { period?: number; history?: unknown[]; number_list?: unknown[]; token_sn?: string; device?: Record<string, unknown> };
@@ -46,14 +47,16 @@ export default {
       const method = request.method.toUpperCase();
       const pathname = url.pathname;
 
-      if (method === "GET" && pathname === "/") {
-        return json(200, { code: 200, msg: "ok", data: { service: "sn-node-server-worker", runtime: "cloudflare-workers" } });
+      if (method === "GET" && pathname === "/admin/login") {
+        return new Response(renderLoginPage(), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
       }
-      if (method === "GET" && pathname === "/scheme") {
-        return json(200, { code: 200, msg: "ok", data: { info: "Use POST /api/get_scheme with sm4 encrypted body.data" } });
-      }
-      if (method === "GET" && pathname === "/health") {
-        return json(200, { code: 200, msg: "ok", data: { now: nowSec() } });
+
+      if (method === "GET" && pathname === "/admin") {
+        return new Response(renderAdminPage(), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
       }
 
       if (method === "POST" && pathname === "/api/verify") {
@@ -698,3 +701,5 @@ function executeStrategyWithConfig(config: StrategyConfig, payload: StrategyPayl
     multiple: Math.max(1, Math.floor(Number(config.multiple || 1))),
   };
 }
+
+
