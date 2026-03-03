@@ -358,7 +358,7 @@ async function consumeNonce(db: D1Database, nonce: string) {
 
 async function verifyAdminCredential(username: string, password: string, cfg: RuntimeConfig) {
   if (username !== cfg.adminUsername) return false;
-  if (cfg.adminPasswordHash) return (await sha256Hex(password)) === cfg.adminPasswordHash;
+  if (cfg.adminPasswordHash) return password === cfg.adminPasswordHash;
   return password === cfg.adminPassword;
 }
 
