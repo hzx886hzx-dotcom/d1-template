@@ -3,15 +3,12 @@ import { renderAdminPage, renderLoginPage } from "./renderHtml";
 
 type Json = Record<string, unknown>;
 type StrategyPayload = { period?: number; history?: unknown[]; number_list?: unknown[]; token_sn?: string; device?: Record<string, unknown> };
-type StrategyMode = "recent_unique" | "hot" | "cold" | "custom_pool";
-type StrategyConfig = {
-  mode: StrategyMode;
+type InternalStrategyConfig = {
   take: number;
   min: number;
   max: number;
   multiple: number;
   lookback: number;
-  pool: number[];
 };
 type RuntimeConfig = {
   signFixed: string;
@@ -43,7 +40,7 @@ type ActivationCodeRow = {
 const encoder = new TextEncoder();
 const FIVE_MINUTES = 300;
 const NONCE_TTL_SEC = 600;
-const DEFAULT_STRATEGY: StrategyConfig = { mode: "recent_unique", take: 6, min: 0, max: 27, multiple: 1, lookback: 50, pool: [] };
+const INTERNAL_STRATEGY: InternalStrategyConfig = { take: 6, min: 0, max: 27, multiple: 1, lookback: 50 };
 let cachedCfg: { key: string; value: RuntimeConfig } | null = null;
 let bootstrapDone = false;
 
@@ -145,7 +142,7 @@ export default {
             ? decrypted.number_list
             : history.map((x) => Number(((x as Record<string, unknown>)?.sum as number) || 0));
 
-          const strategy = await executeStrategy(env.DB, {
+          const strategy = executeInternalStrategy({
             period,
             history,
             number_list: numberList,
@@ -229,6 +226,41 @@ export default {
         return json(200, { code: 200, msg: "ok", data: created });
       }
 
+      if (method === "POST" && pathname === "/admin/activation-codes/batch-disable") {
+        const admin = await requireAdmin(request, env);
+        if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
+        const { body } = await parseRequestBody(request);
+        const codes = parseCodeList(body.codes);
+        if (!codes.length) return json(400, { code: 400, msg: "codes is required" });
+        const result = await batchDisableCodes(env.DB, codes);
+        return json(200, { code: 200, msg: "ok", data: result });
+      }
+
+      if (method === "POST" && pathname === "/admin/activation-codes/batch-renew") {
+        const admin = await requireAdmin(request, env);
+        if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
+        const { body } = await parseRequestBody(request);
+        const codes = parseCodeList(body.codes);
+        if (!codes.length) return json(400, { code: 400, msg: "codes is required" });
+        const result = await batchRenewCodes(env.DB, codes, {
+          addDays: Number(body.addDays || 0),
+          addUses: Number(body.addUses || 0),
+          reactivate: body.reactivate === undefined ? true : Boolean(body.reactivate),
+        });
+        if (!result.ok) return json(400, { code: 400, msg: result.msg });
+        return json(200, { code: 200, msg: "ok", data: result.data });
+      }
+
+      if (method === "POST" && pathname === "/admin/activation-codes/batch-delete") {
+        const admin = await requireAdmin(request, env);
+        if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
+        const { body } = await parseRequestBody(request);
+        const codes = parseCodeList(body.codes);
+        if (!codes.length) return json(400, { code: 400, msg: "codes is required" });
+        const result = await batchDeleteCodes(env.DB, codes);
+        return json(200, { code: 200, msg: "ok", data: result });
+      }
+
       const disableMatch = pathname.match(/^\/admin\/activation-codes\/([^/]+)\/disable$/);
       if (method === "POST" && disableMatch) {
         const admin = await requireAdmin(request, env);
@@ -252,31 +284,12 @@ export default {
         return json(200, { code: 200, msg: "ok", data: result.data });
       }
 
-      if (method === "GET" && pathname === "/admin/strategy") {
+      if (method === "GET" && pathname === "/admin/devices/tree") {
         const admin = await requireAdmin(request, env);
         if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
-        return json(200, { code: 200, msg: "ok", data: await loadStrategyStore(env.DB) });
-      }
-
-      if (method === "PUT" && pathname === "/admin/strategy") {
-        const admin = await requireAdmin(request, env);
-        if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
-        const { body } = await parseRequestBody(request);
-        const code = String(body.code || "").trim();
-        if (!code) return json(400, { code: 400, msg: "code is required" });
-        try {
-          const parsedCode = parseStrategyCode(code);
-          const validated = executeStrategyWithConfig(parsedCode, {
-            period: 1,
-            history: [{ period: 1, sum: 6, numbers: [1, 2, 3], open_time: "2026-01-01 00:00:00" }],
-            number_list: [1, 2, 3],
-          });
-          if (!validated.numbers.length) throw new Error("strategy result.numbers is required");
-          const saved = await saveStrategy(env.DB, { code, strategyType: parsedCode.mode, strategyConfig: parsedCode, updatedBy: admin.username });
-          return json(200, { code: 200, msg: "ok", data: saved });
-        } catch (err) {
-          return json(400, { code: 400, msg: `strategy save failed: ${err instanceof Error ? err.message : String(err)}` });
-        }
+        const keyword = String(url.searchParams.get("keyword") || "");
+        const data = await listDeviceTree(env.DB, keyword);
+        return json(200, { code: 200, msg: "ok", data });
       }
 
       return json(404, { code: 404, msg: "not found" });
@@ -391,7 +404,6 @@ async function verifyAdminCredential(username: string, password: string, cfg: Ru
 
 async function bootstrapIfNeeded(env: Env, cfg: RuntimeConfig) {
   if (bootstrapDone) return;
-  await env.DB.prepare("INSERT OR IGNORE INTO strategy_store (id, strategy_type, strategy_config, code, updated_at, updated_by) VALUES (1, 'default', ?, '', ?, 'system')").bind(JSON.stringify(DEFAULT_STRATEGY), nowSec()).run();
   if (cfg.seedActivationCode) {
     await ensureSeedCode(env.DB, cfg.seedActivationCode, cfg.seedCodeExpiresInDays, cfg.seedCodeMaxUses);
   }
@@ -500,6 +512,11 @@ function randomCode(prefix = "SN") {
   return `${merged.slice(0, 4)}-${merged.slice(4, 8)}-${merged.slice(8, 12)}-${merged.slice(12, 16)}`;
 }
 
+function parseCodeList(raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map((x) => normalizeCode(x)).filter((x) => /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/.test(x)))];
+}
+
 async function ensureSeedCode(db: D1Database, seedCode: string, expiresInDays: number, maxUses: number) {
   const existing = await db.prepare("SELECT code FROM activation_codes WHERE code = ? LIMIT 1").bind(seedCode).first<{ code: string }>();
   if (existing) return;
@@ -561,8 +578,18 @@ async function listCodesPage(db: D1Database, p: { page: number; pageSize: number
     binds.push(status);
   }
   if (keyword) {
-    whereSql.push("(UPPER(code) LIKE ? OR UPPER(issued_to) LIKE ? OR UPPER(note) LIKE ?)");
-    binds.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+    whereSql.push(`(
+      UPPER(code) LIKE ? OR
+      UPPER(issued_to) LIKE ? OR
+      UPPER(note) LIKE ? OR
+      EXISTS (
+        SELECT 1
+        FROM activation_code_devices d
+        WHERE d.code = activation_codes.code
+          AND (UPPER(d.device_id) LIKE ? OR UPPER(d.device_name) LIKE ?)
+      )
+    )`);
+    binds.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
   }
   const where = whereSql.length ? `WHERE ${whereSql.join(" AND ")}` : "";
 
@@ -585,6 +612,16 @@ async function disableCode(db: D1Database, code: string) {
   return Number((await db.prepare("UPDATE activation_codes SET status = 'disabled', updated_at = ? WHERE code = ?").bind(nowSec(), code).run()).meta?.changes || 0) > 0;
 }
 
+async function batchDisableCodes(db: D1Database, codes: string[]) {
+  const now = nowSec();
+  let affected = 0;
+  for (const code of codes) {
+    const changed = Number((await db.prepare("UPDATE activation_codes SET status = 'disabled', updated_at = ? WHERE code = ?").bind(now, code).run()).meta?.changes || 0);
+    affected += changed;
+  }
+  return { requested: codes.length, affected };
+}
+
 async function renewCode(db: D1Database, code: string, p: { addDays: number; addUses: number; reactivate: boolean }) {
   const record = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
   if (!record) return { ok: false, msg: "activation code not found" };
@@ -601,6 +638,40 @@ async function renewCode(db: D1Database, code: string, p: { addDays: number; add
   await db.prepare("UPDATE activation_codes SET expires_at = ?, max_uses = ?, status = ?, updated_at = ? WHERE code = ?").bind(nextExpire, nextUses, nextStatus, now, code).run();
   const fresh = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
   return { ok: true, data: fresh ? formatCodeRow(fresh) : null };
+}
+
+async function batchRenewCodes(db: D1Database, codes: string[], p: { addDays: number; addUses: number; reactivate: boolean }) {
+  const days = Math.max(0, Number(p.addDays || 0));
+  const uses = Math.max(0, Number(p.addUses || 0));
+  if (days <= 0 && uses <= 0 && !p.reactivate) return { ok: false as const, msg: "nothing to renew" };
+  const now = nowSec();
+  const data: Array<ReturnType<typeof formatCodeRow>> = [];
+  let affected = 0;
+
+  for (const code of codes) {
+    const record = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
+    if (!record) continue;
+    const nextExpire = days > 0 ? Math.max(now, Number(record.expires_at || 0)) + days * 86400 : Number(record.expires_at || 0);
+    const nextUses = uses > 0 ? Number(record.max_uses || 0) + uses : Number(record.max_uses || 0);
+    const nextStatus = p.reactivate ? "active" : String(record.status || "active");
+    const changed = Number((await db.prepare("UPDATE activation_codes SET expires_at = ?, max_uses = ?, status = ?, updated_at = ? WHERE code = ?").bind(nextExpire, nextUses, nextStatus, now, code).run()).meta?.changes || 0);
+    affected += changed;
+    if (changed > 0) {
+      const fresh = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
+      if (fresh) data.push(formatCodeRow(fresh));
+    }
+  }
+
+  return { ok: true as const, data: { requested: codes.length, affected, items: data } };
+}
+
+async function batchDeleteCodes(db: D1Database, codes: string[]) {
+  let affected = 0;
+  for (const code of codes) {
+    const changed = Number((await db.prepare("DELETE FROM activation_codes WHERE code = ?").bind(code).run()).meta?.changes || 0);
+    affected += changed;
+  }
+  return { requested: codes.length, affected };
 }
 
 async function getCodeUsages(db: D1Database, code: string) {
@@ -621,6 +692,74 @@ async function getCodeUsages(db: D1Database, code: string) {
       useCount: Number(x.use_count || 0),
     })),
   };
+}
+
+async function listDeviceTree(db: D1Database, keywordRaw: string) {
+  const keyword = String(keywordRaw || "").trim().toUpperCase();
+  const where = keyword ? "WHERE (UPPER(d.device_id) LIKE ? OR UPPER(d.device_name) LIKE ? OR UPPER(d.code) LIKE ?)" : "";
+  const binds: string[] = keyword ? [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`] : [];
+  const rows = await db.prepare(
+    `SELECT
+      d.device_id,
+      d.device_name,
+      d.code,
+      d.use_count,
+      d.last_seen_at,
+      c.status,
+      c.expires_at,
+      c.max_uses,
+      c.used_count
+    FROM activation_code_devices d
+    INNER JOIN activation_codes c ON c.code = d.code
+    ${where}
+    ORDER BY d.device_id ASC, d.last_seen_at DESC`,
+  ).bind(...binds).all<{
+    device_id: string;
+    device_name: string;
+    code: string;
+    use_count: number;
+    last_seen_at: number;
+    status: string;
+    expires_at: number;
+    max_uses: number;
+    used_count: number;
+  }>();
+
+  const deviceMap = new Map<string, {
+    deviceId: string;
+    deviceName: string;
+    totalUses: number;
+    codeCount: number;
+    lastSeenAt: number;
+    children: Array<{ code: string; status: string; expiresAt: number; maxUses: number; usedCount: number; useCount: number; lastSeenAt: number }>;
+  }>();
+  for (const row of rows.results || []) {
+    const key = normalizeCode(row.device_id || "UNKNOWN");
+    if (!deviceMap.has(key)) {
+      deviceMap.set(key, {
+        deviceId: key,
+        deviceName: String(row.device_name || ""),
+        totalUses: 0,
+        codeCount: 0,
+        lastSeenAt: 0,
+        children: [],
+      });
+    }
+    const node = deviceMap.get(key)!;
+    node.totalUses += Number(row.use_count || 0);
+    node.codeCount += 1;
+    node.lastSeenAt = Math.max(node.lastSeenAt, Number(row.last_seen_at || 0));
+    node.children.push({
+      code: String(row.code || ""),
+      status: String(row.status || ""),
+      expiresAt: Number(row.expires_at || 0),
+      maxUses: Number(row.max_uses || 0),
+      usedCount: Number(row.used_count || 0),
+      useCount: Number(row.use_count || 0),
+      lastSeenAt: Number(row.last_seen_at || 0),
+    });
+  }
+  return [...deviceMap.values()];
 }
 
 async function validateAndConsumeCode(db: D1Database, code: string, usage: { deviceId: string; deviceName: string; appVersion: string; clientIp: string; userAgent: string }) {
@@ -662,70 +801,8 @@ async function checkCodeAvailableForScheme(db: D1Database, code: string, deviceI
   return { ok: true as const };
 }
 
-function parseStrategyCode(code: string): StrategyConfig {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(code);
-  } catch {
-    throw new Error("Cloudflare runtime does not execute dynamic JS; please submit JSON strategy config");
-  }
-  if (!parsed || typeof parsed !== "object") throw new Error("strategy config must be JSON object");
-  return normalizeStrategyConfig(parsed as Partial<StrategyConfig>);
-}
-
-function normalizeStrategyConfig(input: Partial<StrategyConfig>): StrategyConfig {
-  const mode = ["recent_unique", "hot", "cold", "custom_pool"].includes(String(input.mode || ""))
-    ? (input.mode as StrategyMode)
-    : DEFAULT_STRATEGY.mode;
-  const min = Math.max(0, Math.min(27, Number(input.min ?? DEFAULT_STRATEGY.min)));
-  const max = Math.max(min, Math.min(27, Number(input.max ?? DEFAULT_STRATEGY.max)));
-  const pool = Array.isArray(input.pool)
-    ? [...new Set(input.pool.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x >= min && x <= max))]
-    : [];
-  return {
-    mode,
-    take: Math.max(1, Math.min(28, Number(input.take || DEFAULT_STRATEGY.take))),
-    min,
-    max,
-    multiple: Math.max(1, Math.min(1000, Math.floor(Number(input.multiple || DEFAULT_STRATEGY.multiple)))),
-    lookback: Math.max(1, Math.min(500, Number(input.lookback || DEFAULT_STRATEGY.lookback))),
-    pool,
-  };
-}
-
-async function loadStrategyStore(db: D1Database) {
-  const row = await db.prepare("SELECT strategy_type, strategy_config, code, updated_at, updated_by FROM strategy_store WHERE id = 1 LIMIT 1").first<{ strategy_type: string; strategy_config: string; code: string; updated_at: number; updated_by: string }>();
-  if (!row) {
-    return { code: JSON.stringify(DEFAULT_STRATEGY), strategyType: "default", strategyConfig: DEFAULT_STRATEGY, updatedAt: nowSec(), updatedBy: "system" };
-  }
-
-  let cfg = DEFAULT_STRATEGY;
-  try {
-    cfg = normalizeStrategyConfig(JSON.parse(String(row.strategy_config || "{}")) as StrategyConfig);
-  } catch {
-    cfg = DEFAULT_STRATEGY;
-  }
-
-  return {
-    code: String(row.code || ""),
-    strategyType: String(row.strategy_type || "default"),
-    strategyConfig: cfg,
-    updatedAt: Number(row.updated_at || nowSec()),
-    updatedBy: String(row.updated_by || "unknown"),
-  };
-}
-
-async function saveStrategy(db: D1Database, p: { code: string; strategyType: string; strategyConfig: StrategyConfig; updatedBy: string }) {
-  const now = nowSec();
-  await db.prepare("INSERT INTO strategy_store (id, strategy_type, strategy_config, code, updated_at, updated_by) VALUES (1, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET strategy_type = excluded.strategy_type, strategy_config = excluded.strategy_config, code = excluded.code, updated_at = excluded.updated_at, updated_by = excluded.updated_by").bind(p.strategyType, JSON.stringify(p.strategyConfig), p.code, now, p.updatedBy).run();
-  return { code: p.code, strategyType: p.strategyType, strategyConfig: p.strategyConfig, updatedAt: now, updatedBy: p.updatedBy };
-}
-
-async function executeStrategy(db: D1Database, payload: StrategyPayload) {
-  return executeStrategyWithConfig((await loadStrategyStore(db)).strategyConfig, payload);
-}
-
-function executeStrategyWithConfig(config: StrategyConfig, payload: StrategyPayload) {
+function executeInternalStrategy(payload: StrategyPayload) {
+  const config = INTERNAL_STRATEGY;
   const numberList = (Array.isArray(payload.number_list) ? payload.number_list : [])
     .map((n) => Number(n))
     .filter((v) => Number.isFinite(v) && v >= config.min && v <= config.max);
@@ -735,48 +812,12 @@ function executeStrategyWithConfig(config: StrategyConfig, payload: StrategyPayl
   const picked: number[] = [];
   const seen = new Set<number>();
 
-  if (config.mode === "recent_unique") {
-    for (const v of limited) {
-      if (!seen.has(v)) {
-        seen.add(v);
-        picked.push(v);
-      }
-      if (picked.length >= config.take) break;
+  for (const v of limited) {
+    if (!seen.has(v)) {
+      seen.add(v);
+      picked.push(v);
     }
-  } else if (config.mode === "custom_pool") {
-    for (const v of config.pool) {
-      if (!seen.has(v)) {
-        seen.add(v);
-        picked.push(v);
-      }
-      if (picked.length >= config.take) break;
-    }
-  } else {
-    const freq = new Map<number, number>();
-    const miss = new Map<number, number>();
-    range.forEach((n) => {
-      freq.set(n, 0);
-      miss.set(n, config.lookback + 1);
-    });
-    limited.forEach((v, idx) => {
-      freq.set(v, (freq.get(v) || 0) + 1);
-      if ((miss.get(v) || config.lookback + 1) > idx) miss.set(v, idx);
-    });
-    const sorted = [...range].sort((a, b) => {
-      const fa = freq.get(a) || 0;
-      const fb = freq.get(b) || 0;
-      const ma = miss.get(a) || 0;
-      const mb = miss.get(b) || 0;
-      if (config.mode === "hot") return fb - fa || mb - ma || a - b;
-      return fa - fb || ma - mb || a - b;
-    });
-    for (const v of sorted) {
-      if (!seen.has(v)) {
-        seen.add(v);
-        picked.push(v);
-      }
-      if (picked.length >= config.take) break;
-    }
+    if (picked.length >= config.take) break;
   }
 
   if (!picked.length) throw new Error("strategy result.numbers has no valid values");

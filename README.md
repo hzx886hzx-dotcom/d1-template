@@ -6,7 +6,7 @@
 - 方案计算：`POST /api/get_scheme`
 - 管理登录与会话：`/web/login` `/web/me` `/web/logout`
 - 激活码管理：`/admin/activation-codes*`
-- 策略管理：`GET/PUT /admin/strategy`
+- 设备树查询：`GET /admin/devices/tree`
 
 ## 增强项
 
@@ -14,31 +14,15 @@
 - 管理员会话持久化到 D1，不依赖进程内存。
 - 签名接口支持可选 `x-nonce` 防重放（如传入则强校验）。
 - 支持 `ADMIN_PASSWORD_HASH`（sha256）避免明文密码。
-- 启动自动初始化默认策略与种子激活码。
+- 启动自动初始化种子激活码。
 
 ## 重要差异
 
-旧版策略是“上传 JS 代码执行”。Cloudflare Worker 默认不支持动态执行任意 JS。
-
-当前实现中，`PUT /admin/strategy` 接收 **JSON 策略配置**，示例：
-
-```json
-{
-  "mode": "recent_unique",
-  "take": 6,
-  "min": 0,
-  "max": 27,
-  "multiple": 1
-}
-```
-
-请求体格式仍是：
-
-```json
-{
-  "code": "{\"mode\":\"recent_unique\",\"take\":6,\"min\":0,\"max\":27,\"multiple\":1}"
-}
-```
+- 方案计算已改为后端内部固定逻辑，不再从“策略配置”读取或动态更新。
+- 管理端支持批量激活码操作：
+  - `POST /admin/activation-codes/batch-disable`
+  - `POST /admin/activation-codes/batch-renew`
+  - `POST /admin/activation-codes/batch-delete`
 
 ## 环境变量
 
