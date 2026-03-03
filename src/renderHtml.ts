@@ -204,7 +204,7 @@ async function api(path, init) {
   return j;
 }
 function fmtTs(v){ if(!v) return "-"; return new Date(Number(v)*1000).toLocaleString(); }
-function esc(v){ return String(v ?? "").replace(/[<>&"]/g, (m) => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;", "\"":"&quot;" }[m])); }
+function esc(v){ return String(v ?? "").replace(/[<>&"]/g, (m) => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;", "":"&quot;" }[m])); }
 function getSelectedCodes(){ return Array.from(selectedCodes.values()); }
 function syncSelectedInfo(){ selectedInfo.textContent = "已选择: " + selectedCodes.size; }
 
