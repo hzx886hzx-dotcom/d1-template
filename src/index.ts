@@ -521,7 +521,7 @@ function parseCodeList(raw: unknown) {
   } else if (raw !== null && raw !== undefined) {
     source = [raw];
   }
-  return [...new Set(source.map((x) => normalizeCode(x)).filter((x) => /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/.test(x)))];
+  return [...new Set(source.map((x) => normalizeCode(x)).filter((x) => isActivationCodeLike(x)))];
 }
 
 function extractCodesFromBody(body: Json) {
@@ -543,6 +543,13 @@ function extractCodesFromBody(body: Json) {
     if (parsed.length) return parsed;
   }
   return [];
+}
+
+function isActivationCodeLike(code: string) {
+  // Backward compatibility:
+  // - legacy style: XXXX-XXXX
+  // - current style: XXXX-XXXX-XXXX-XXXX
+  return /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){1,3}$/.test(code);
 }
 
 async function ensureSeedCode(db: D1Database, seedCode: string, expiresInDays: number, maxUses: number) {
