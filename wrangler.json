@@ -1,7 +1,7 @@
 {
 	"compatibility_date": "2025-10-08",
 	"main": "src/index.ts",
-	"name": "d1-template",
+	"name": "sn-node-server",
 	"upload_source_maps": true,
 	"d1_databases": [
 		{
@@ -12,5 +12,10 @@
 	],
 	"observability": {
 		"enabled": true
+	},
+	"vars": {
+		"SN_SIGN_FIXED": "bjx",
+		"TOKEN_TTL_SEC": "7200",
+		"ADMIN_USERNAME": "superadmin"
 	}
 }

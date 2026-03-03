@@ -1,6 +1,6 @@
 {
-	"name": "d1-template",
-	"description": "Cloudflare's native serverless SQL database.",
+	"name": "sn-node-server-worker",
+	"description": "SN activation and strategy API on Cloudflare Workers + D1",
 	"cloudflare": {
 		"label": "Worker + D1 Database",
 		"products": [
@@ -14,6 +14,9 @@
 		"preview_icon_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/6c63cca8-354a-4951-45a0-d58769ac6f00/public",
 		"preview_image_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/aa6158f1-7711-4485-f134-a8c802c0a800/preview",
 		"publish": true
+	},
+	"dependencies": {
+		"sm-crypto": "^0.3.13"
 	},
 	"devDependencies": {
 		"typescript": "5.9.3",

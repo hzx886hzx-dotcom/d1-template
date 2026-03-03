@@ -1,59 +1,87 @@
-# Worker + D1 Database
+﻿# SN Node Server (Cloudflare Worker + D1)
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/templates/tree/main/d1-template)
+基于 `d1-template` 改造，已实现原 `node_server` 核心逻辑，并迁移到 Cloudflare：
 
-![Worker + D1 Template Preview](https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/cb7cb0a9-6102-4822-633c-b76b7bb25900/public)
+- 激活码校验与绑定：`POST /api/verify`
+- 方案计算：`POST /api/get_scheme`
+- 管理登录与会话：`/web/login` `/web/me` `/web/logout`
+- 激活码管理：`/admin/activation-codes*`
+- 策略管理：`GET/PUT /admin/strategy`
 
-<!-- dash-content-start -->
+## 增强项
 
-D1 is Cloudflare's native serverless SQL database ([docs](https://developers.cloudflare.com/d1/)). This project demonstrates using a Worker with a D1 binding to execute a SQL statement. A simple frontend displays the result of this query:
+- 存储从本地 JSON 文件迁移到 D1，支持多实例部署。
+- 管理员会话持久化到 D1，不依赖进程内存。
+- 签名接口支持可选 `x-nonce` 防重放（如传入则强校验）。
+- 支持 `ADMIN_PASSWORD_HASH`（sha256）避免明文密码。
+- 启动自动初始化默认策略与种子激活码。
 
-```SQL
-SELECT * FROM comments LIMIT 3;
+## 重要差异
+
+旧版策略是“上传 JS 代码执行”。Cloudflare Worker 默认不支持动态执行任意 JS。
+
+当前实现中，`PUT /admin/strategy` 接收 **JSON 策略配置**，示例：
+
+```json
+{
+  "mode": "recent_unique",
+  "take": 6,
+  "min": 0,
+  "max": 27,
+  "multiple": 1
+}
 ```
 
-The D1 database is initialized with a `comments` table and this data:
+请求体格式仍是：
 
-```SQL
-INSERT INTO comments (author, content)
-VALUES
-    ('Kristian', 'Congrats!'),
-    ('Serena', 'Great job!'),
-    ('Max', 'Keep up the good work!')
-;
+```json
+{
+  "code": "{\"mode\":\"recent_unique\",\"take\":6,\"min\":0,\"max\":27,\"multiple\":1}"
+}
 ```
 
-> [!IMPORTANT]
-> When using C3 to create this project, select "no" when it asks if you want to deploy. You need to follow this project's [setup steps](https://github.com/cloudflare/templates/tree/main/d1-template#setup-steps) before deploying.
+## 环境变量
 
-<!-- dash-content-end -->
+- `SN_SIGN_FIXED` 默认 `bjx`
+- `SN_AES_KEY` 默认 `your-32-byte-aes-key-here`
+- `SN_AES_IV` 默认 `your-16-byte-iv-here`
+- `SN_SM4_KEY` 默认 `your-sm4-key-here`
+- `TOKEN_TTL_SEC` 默认 `7200`
+- `ADMIN_USERNAME` 默认 `superadmin`
+- `ADMIN_PASSWORD` 默认 `Super@123456`
+- `ADMIN_PASSWORD_HASH` 可选，优先于 `ADMIN_PASSWORD`
+- `SEED_ACTIVATION_CODE` 可选，启动时自动写入
+- `SEED_CODE_EXPIRES_DAYS` 默认 `365`
+- `SEED_CODE_MAX_USES` 默认 `100000`
 
-## Getting Started
+## 本地开发
 
-Outside of this repo, you can start a new project with this template using [C3](https://developers.cloudflare.com/pages/get-started/c3/) (the `create-cloudflare` CLI):
-
+```bash
+npm install
+npx wrangler d1 migrations apply DB --local
+npm run dev
 ```
-npm create cloudflare@latest -- --template=cloudflare/templates/d1-template
+
+## 远端部署
+
+1. 创建 D1 并把 `database_id` 写入 `wrangler.json`。
+2. 执行迁移：
+
+```bash
+npx wrangler d1 migrations apply DB --remote
 ```
 
-A live public deployment of this template is available at [https://d1-template.templates.workers.dev](https://d1-template.templates.workers.dev)
+3. 设置密钥类变量（示例）：
 
-## Setup Steps
+```bash
+npx wrangler secret put SN_AES_KEY
+npx wrangler secret put SN_AES_IV
+npx wrangler secret put SN_SM4_KEY
+npx wrangler secret put ADMIN_PASSWORD_HASH
+```
 
-1. Install the project dependencies with a package manager of your choice:
-   ```bash
-   npm install
-   ```
-2. Create a [D1 database](https://developers.cloudflare.com/d1/get-started/) with the name "d1-template-database":
-   ```bash
-   npx wrangler d1 create d1-template-database
-   ```
-   ...and update the `database_id` field in `wrangler.json` with the new database ID.
-3. Run the following db migration to initialize the database (notice the `migrations` directory in this project):
-   ```bash
-   npx wrangler d1 migrations apply --remote d1-template-database
-   ```
-4. Deploy the project!
-   ```bash
-   npx wrangler deploy
-   ```
+4. 部署：
+
+```bash
+npm run deploy
+```
