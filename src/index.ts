@@ -3,7 +3,16 @@ import { renderAdminPage, renderLoginPage } from "./renderHtml";
 
 type Json = Record<string, unknown>;
 type StrategyPayload = { period?: number; history?: unknown[]; number_list?: unknown[]; token_sn?: string; device?: Record<string, unknown> };
-type StrategyConfig = { mode: "recent_unique"; take: number; min: number; max: number; multiple: number };
+type StrategyMode = "recent_unique" | "hot" | "cold" | "custom_pool";
+type StrategyConfig = {
+  mode: StrategyMode;
+  take: number;
+  min: number;
+  max: number;
+  multiple: number;
+  lookback: number;
+  pool: number[];
+};
 type RuntimeConfig = {
   signFixed: string;
   tokenTtlSec: number;
@@ -34,7 +43,7 @@ type ActivationCodeRow = {
 const encoder = new TextEncoder();
 const FIVE_MINUTES = 300;
 const NONCE_TTL_SEC = 600;
-const DEFAULT_STRATEGY: StrategyConfig = { mode: "recent_unique", take: 6, min: 0, max: 27, multiple: 1 };
+const DEFAULT_STRATEGY: StrategyConfig = { mode: "recent_unique", take: 6, min: 0, max: 27, multiple: 1, lookback: 50, pool: [] };
 let cachedCfg: { key: string; value: RuntimeConfig } | null = null;
 let bootstrapDone = false;
 
@@ -66,8 +75,8 @@ export default {
         const body = parsed.body;
         const sn = normalizeCode(body.sn);
         if (!sn) return json(400, { code: 400, msg: "sn is required" });
-        if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sn)) {
-          return json(400, { code: 400, msg: "sn must be XXXX-XXXX (uppercase letters/digits)" });
+        if (!/^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/.test(sn)) {
+          return json(400, { code: 400, msg: "sn must be XXXX-XXXX-XXXX-XXXX (uppercase letters/digits)" });
         }
 
         const usage = buildUsageContext(request, body);
@@ -107,6 +116,10 @@ export default {
         const usage = buildUsageContext(request, body);
         if (normalizeCode(payload.device_id) !== normalizeCode(usage.deviceId || "UNKNOWN")) {
           return json(401, { code: 401, msg: "token device mismatch" });
+        }
+        const activeCheck = await checkCodeAvailableForScheme(env.DB, payload.sn, normalizeCode(usage.deviceId || "UNKNOWN"));
+        if (!activeCheck.ok) {
+          return json(401, { code: 401, msg: activeCheck.msg });
         }
 
         const encrypted = typeof body.data === "string" ? body.data : "";
@@ -259,7 +272,7 @@ export default {
             number_list: [1, 2, 3],
           });
           if (!validated.numbers.length) throw new Error("strategy result.numbers is required");
-          const saved = await saveStrategy(env.DB, { code, strategyType: "json", strategyConfig: parsedCode, updatedBy: admin.username });
+          const saved = await saveStrategy(env.DB, { code, strategyType: parsedCode.mode, strategyConfig: parsedCode, updatedBy: admin.username });
           return json(200, { code: 200, msg: "ok", data: saved });
         } catch (err) {
           return json(400, { code: 400, msg: `strategy save failed: ${err instanceof Error ? err.message : String(err)}` });
@@ -372,7 +385,7 @@ async function consumeNonce(db: D1Database, nonce: string) {
 
 async function verifyAdminCredential(username: string, password: string, cfg: RuntimeConfig) {
   if (username !== cfg.adminUsername) return false;
-  if (cfg.adminPasswordHash) return password === cfg.adminPasswordHash;
+  if (cfg.adminPasswordHash) return (await sha256Hex(password)) === cfg.adminPasswordHash;
   return password === cfg.adminPassword;
 }
 
@@ -482,8 +495,9 @@ async function sha256Hex(input: string) {
 
 function randomCode(prefix = "SN") {
   const p = String(prefix || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-  const randomPart = randomHex(16).toUpperCase();
-  return `${(p + randomPart).slice(0, 4).padEnd(4, "A")}-${randomPart.slice(4, 8).padEnd(4, "B")}`;
+  const randomPart = randomHex(32).toUpperCase();
+  const merged = (p + randomPart).slice(0, 16).padEnd(16, "A");
+  return `${merged.slice(0, 4)}-${merged.slice(4, 8)}-${merged.slice(8, 12)}-${merged.slice(12, 16)}`;
 }
 
 async function ensureSeedCode(db: D1Database, seedCode: string, expiresInDays: number, maxUses: number) {
@@ -636,6 +650,18 @@ async function validateAndConsumeCode(db: D1Database, code: string, usage: { dev
   return { ok: true as const, record: fresh, deviceCount: deviceCount + 1 };
 }
 
+async function checkCodeAvailableForScheme(db: D1Database, code: string, deviceId: string) {
+  const record = await db.prepare("SELECT code, status, expires_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<{ code: string; status: string; expires_at: number }>();
+  if (!record) return { ok: false as const, msg: "activation code not found" };
+  const now = nowSec();
+  if (record.status !== "active") return { ok: false as const, msg: "activation code disabled" };
+  if (Number(record.expires_at || 0) < now) return { ok: false as const, msg: "activation code expired" };
+
+  const binding = await db.prepare("SELECT device_id FROM activation_code_devices WHERE code = ? AND device_id = ? LIMIT 1").bind(code, normalizeCode(deviceId)).first();
+  if (!binding) return { ok: false as const, msg: "activation code device binding invalid" };
+  return { ok: true as const };
+}
+
 function parseStrategyCode(code: string): StrategyConfig {
   let parsed: unknown;
   try {
@@ -648,12 +674,22 @@ function parseStrategyCode(code: string): StrategyConfig {
 }
 
 function normalizeStrategyConfig(input: Partial<StrategyConfig>): StrategyConfig {
+  const mode = ["recent_unique", "hot", "cold", "custom_pool"].includes(String(input.mode || ""))
+    ? (input.mode as StrategyMode)
+    : DEFAULT_STRATEGY.mode;
+  const min = Math.max(0, Math.min(27, Number(input.min ?? DEFAULT_STRATEGY.min)));
+  const max = Math.max(min, Math.min(27, Number(input.max ?? DEFAULT_STRATEGY.max)));
+  const pool = Array.isArray(input.pool)
+    ? [...new Set(input.pool.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x >= min && x <= max))]
+    : [];
   return {
-    mode: "recent_unique",
+    mode,
     take: Math.max(1, Math.min(28, Number(input.take || DEFAULT_STRATEGY.take))),
-    min: Math.max(0, Math.min(27, Number(input.min ?? DEFAULT_STRATEGY.min))),
-    max: Math.max(0, Math.min(27, Number(input.max ?? DEFAULT_STRATEGY.max))),
+    min,
+    max,
     multiple: Math.max(1, Math.min(1000, Math.floor(Number(input.multiple || DEFAULT_STRATEGY.multiple)))),
+    lookback: Math.max(1, Math.min(500, Number(input.lookback || DEFAULT_STRATEGY.lookback))),
+    pool,
   };
 }
 
@@ -690,29 +726,66 @@ async function executeStrategy(db: D1Database, payload: StrategyPayload) {
 }
 
 function executeStrategyWithConfig(config: StrategyConfig, payload: StrategyPayload) {
-  const numberList = Array.isArray(payload.number_list) ? payload.number_list : [];
-  const seen = new Set<number>();
+  const numberList = (Array.isArray(payload.number_list) ? payload.number_list : [])
+    .map((n) => Number(n))
+    .filter((v) => Number.isFinite(v) && v >= config.min && v <= config.max);
+  const limited = numberList.slice(0, config.lookback);
+  const range: number[] = [];
+  for (let i = config.min; i <= config.max; i += 1) range.push(i);
   const picked: number[] = [];
+  const seen = new Set<number>();
 
-  for (const n of numberList) {
-    const v = Number(n);
-    if (!Number.isFinite(v) || v < config.min || v > config.max) continue;
-    if (!seen.has(v)) {
-      seen.add(v);
-      picked.push(v);
+  if (config.mode === "recent_unique") {
+    for (const v of limited) {
+      if (!seen.has(v)) {
+        seen.add(v);
+        picked.push(v);
+      }
+      if (picked.length >= config.take) break;
     }
-    if (picked.length >= config.take) break;
-  }
-
-  for (let i = config.min; picked.length < config.take && i <= config.max; i += 1) {
-    if (!seen.has(i)) picked.push(i);
+  } else if (config.mode === "custom_pool") {
+    for (const v of config.pool) {
+      if (!seen.has(v)) {
+        seen.add(v);
+        picked.push(v);
+      }
+      if (picked.length >= config.take) break;
+    }
+  } else {
+    const freq = new Map<number, number>();
+    const miss = new Map<number, number>();
+    range.forEach((n) => {
+      freq.set(n, 0);
+      miss.set(n, config.lookback + 1);
+    });
+    limited.forEach((v, idx) => {
+      freq.set(v, (freq.get(v) || 0) + 1);
+      if ((miss.get(v) || config.lookback + 1) > idx) miss.set(v, idx);
+    });
+    const sorted = [...range].sort((a, b) => {
+      const fa = freq.get(a) || 0;
+      const fb = freq.get(b) || 0;
+      const ma = miss.get(a) || 0;
+      const mb = miss.get(b) || 0;
+      if (config.mode === "hot") return fb - fa || mb - ma || a - b;
+      return fa - fb || ma - mb || a - b;
+    });
+    for (const v of sorted) {
+      if (!seen.has(v)) {
+        seen.add(v);
+        picked.push(v);
+      }
+      if (picked.length >= config.take) break;
+    }
   }
 
   if (!picked.length) throw new Error("strategy result.numbers has no valid values");
+  for (let i = config.min; picked.length < config.take && i <= config.max; i += 1) {
+    if (!seen.has(i)) picked.push(i);
+  }
   return {
     period: Number(payload.period || 0),
     numbers: picked,
     multiple: Math.max(1, Math.floor(Number(config.multiple || 1))),
   };
 }
-
