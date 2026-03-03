@@ -352,19 +352,11 @@ export async function validateAndConsumeCode(
   const baseDuration = Math.max(0, Number(record.duration_sec || CARD_TYPE_SECONDS.month));
   const computedExpireAt = computeExpireAt(String(record.card_type || "month"), activatedAt || now, baseDuration);
 
-  try {
-    await db.prepare("BEGIN TRANSACTION").run();
-
-    const updated = await db.prepare(
+  const batchResult = await db.batch([
+    db.prepare(
       "UPDATE activation_codes SET used_count = used_count + 1, last_used_at = ?, updated_at = ?, activated_at = COALESCE(activated_at, ?), expires_at = CASE WHEN card_type = 'permanent' THEN 0 WHEN activated_at IS NULL THEN ? ELSE expires_at END WHERE code = ? AND status = 'active' AND used_count < max_uses"
-    ).bind(now, now, now, computedExpireAt, code).run();
-
-    if (Number(updated.meta?.changes || 0) <= 0) {
-      await db.prepare("ROLLBACK").run();
-      return { ok: false, msg: "activation code usage limit reached" };
-    }
-
-    await db.prepare(
+    ).bind(now, now, now, computedExpireAt, code),
+    db.prepare(
       "INSERT OR REPLACE INTO devices (device_id, device_name, app_version, client_ip, user_agent, first_seen_at, last_seen_at, is_active) VALUES (?, ?, ?, ?, ?, COALESCE((SELECT first_seen_at FROM devices WHERE device_id = ?), ?), ?, 1)"
     ).bind(
       currentDeviceId,
@@ -375,16 +367,15 @@ export async function validateAndConsumeCode(
       currentDeviceId,
       now,
       now
-    ).run();
-
-    await db.prepare(
+    ),
+    db.prepare(
       "INSERT INTO device_activations (device_id, activation_code, activated_at, expires_at, is_active, renewal_count) VALUES (?, ?, ?, ?, 1, 0)"
-    ).bind(currentDeviceId, code, now, computedExpireAt).run();
+    ).bind(currentDeviceId, code, now, computedExpireAt),
+  ]);
 
-    await db.prepare("COMMIT").run();
-  } catch (err) {
-    await db.prepare("ROLLBACK").run();
-    throw err;
+  const updated = batchResult[0];
+  if (Number(updated.meta?.changes || 0) <= 0) {
+    return { ok: false, msg: "activation code usage limit reached" };
   }
 
   const fresh = await db.prepare(
