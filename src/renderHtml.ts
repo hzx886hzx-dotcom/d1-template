@@ -448,17 +448,6 @@ document.getElementById("createBtn").addEventListener("click", async () => {
     const created = j.data || [];
     createMsg.className = "ok";
     createMsg.textContent = "已创建: " + created.length;
-    createDetail.textContent = created.map((x) => x.code).join("\n");
-    await loadList();
-    await loadDeviceTree();
-  } catch (e) {
-    createMsg.className = "err";
-    createMsg.textContent = String(e);
-  }
-});
-    const created = j.data || [];
-    createMsg.className = "ok";
-    createMsg.textContent = "Created: " + created.length;
     createDetail.textContent = created.map((x) => x.code).join("\\n");
     await loadList();
     await loadDeviceTree();

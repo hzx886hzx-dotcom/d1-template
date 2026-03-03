@@ -803,30 +803,31 @@ async function checkCodeAvailableForScheme(db: D1Database, code: string, deviceI
 
 function executeInternalStrategy(payload: StrategyPayload) {
   const config = INTERNAL_STRATEGY;
-  const numberList = (Array.isArray(payload.number_list) ? payload.number_list : [])
-    .map((n) => Number(n))
-    .filter((v) => Number.isFinite(v) && v >= config.min && v <= config.max);
-  const limited = numberList.slice(0, config.lookback);
-  const range: number[] = [];
-  for (let i = config.min; i <= config.max; i += 1) range.push(i);
-  const picked: number[] = [];
-  const seen = new Set<number>();
+  type Color = "red" | "blue" | "green";
+  const MAPPING: Record<number, Color> = {
+    0: "blue", 1: "red", 2: "red", 3: "blue", 4: "red", 5: "red", 6: "red", 7: "red", 8: "red", 9: "red",
+    10: "red", 11: "blue", 12: "red", 13: "red", 14: "red", 15: "blue", 16: "red", 17: "red", 18: "red", 19: "red",
+    20: "blue", 21: "red", 22: "green", 23: "blue", 24: "blue", 25: "red", 26: "red", 27: "red", 28: "red", 29: "red",
+    30: "red", 31: "red", 32: "blue", 33: "red", 34: "red", 35: "red", 36: "blue", 37: "blue", 38: "red", 39: "red",
+    40: "blue", 41: "red", 42: "red", 43: "blue", 44: "blue", 45: "red", 46: "red", 47: "blue", 48: "red", 49: "red",
+    50: "blue", 51: "blue", 52: "red", 53: "red", 54: "blue", 55: "red", 56: "red", 57: "red", 58: "green", 59: "blue",
+    60: "red", 61: "red", 62: "red", 63: "red", 64: "red", 65: "red", 66: "red", 67: "red", 68: "red", 69: "blue",
+    70: "red", 71: "red", 72: "red", 73: "red", 74: "red", 75: "red", 76: "blue", 77: "red", 78: "red", 79: "blue",
+    80: "blue", 81: "blue", 82: "red", 83: "red", 84: "blue", 85: "blue", 86: "green", 87: "red", 88: "red", 89: "blue",
+    90: "red", 91: "blue", 92: "red", 93: "red", 94: "green"
+  };
+  const blue = [3, 4, 9, 10, 14, 15, 20, 25, 26]
+  const green = [5, 6, 11, 16, 17, 21, 22, 27]
+  const red = [1, 2, 7, 8, 12, 13, 18, 19, 23, 24]
+  const NUMBERS_BY_COLOR: Record<Color, number[]> = { red, blue, green };
+  const num = Number(payload.period || 0)
+  const remainder = ((num % 95) + 95) % 95
+  const predictedColor: Color = MAPPING[remainder] || "red";
+  const use = NUMBERS_BY_COLOR[predictedColor] || red;
 
-  for (const v of limited) {
-    if (!seen.has(v)) {
-      seen.add(v);
-      picked.push(v);
-    }
-    if (picked.length >= config.take) break;
-  }
-
-  if (!picked.length) throw new Error("strategy result.numbers has no valid values");
-  for (let i = config.min; picked.length < config.take && i <= config.max; i += 1) {
-    if (!seen.has(i)) picked.push(i);
-  }
   return {
     period: Number(payload.period || 0),
-    numbers: picked,
-    multiple: Math.max(1, Math.floor(Number(config.multiple || 1))),
+    numbers: use,
+    multiple: 1,
   };
 }
