@@ -230,7 +230,7 @@ export default {
         const admin = await requireAdmin(request, env);
         if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
         const { body } = await parseRequestBody(request);
-        const codes = parseCodeList(body.codes);
+        const codes = extractCodesFromBody(body);
         if (!codes.length) return json(400, { code: 400, msg: "codes is required" });
         const result = await batchDisableCodes(env.DB, codes);
         return json(200, { code: 200, msg: "ok", data: result });
@@ -240,7 +240,7 @@ export default {
         const admin = await requireAdmin(request, env);
         if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
         const { body } = await parseRequestBody(request);
-        const codes = parseCodeList(body.codes);
+        const codes = extractCodesFromBody(body);
         if (!codes.length) return json(400, { code: 400, msg: "codes is required" });
         const result = await batchRenewCodes(env.DB, codes, {
           addDays: Number(body.addDays || 0),
@@ -255,7 +255,7 @@ export default {
         const admin = await requireAdmin(request, env);
         if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
         const { body } = await parseRequestBody(request);
-        const codes = parseCodeList(body.codes);
+        const codes = extractCodesFromBody(body);
         if (!codes.length) return json(400, { code: 400, msg: "codes is required" });
         const result = await batchDeleteCodes(env.DB, codes);
         return json(200, { code: 200, msg: "ok", data: result });
@@ -513,8 +513,36 @@ function randomCode(prefix = "SN") {
 }
 
 function parseCodeList(raw: unknown) {
-  if (!Array.isArray(raw)) return [];
-  return [...new Set(raw.map((x) => normalizeCode(x)).filter((x) => /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/.test(x)))];
+  let source: unknown[] = [];
+  if (Array.isArray(raw)) {
+    source = raw;
+  } else if (typeof raw === "string") {
+    source = raw.split(/[\s,;\n\r]+/).filter(Boolean);
+  } else if (raw !== null && raw !== undefined) {
+    source = [raw];
+  }
+  return [...new Set(source.map((x) => normalizeCode(x)).filter((x) => /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/.test(x)))];
+}
+
+function extractCodesFromBody(body: Json) {
+  const data = body.data && typeof body.data === "object" ? (body.data as Record<string, unknown>) : null;
+  const candidates: unknown[] = [
+    body.codes,
+    body.code,
+    body.activationCodes,
+    body.activationCode,
+    body.sn,
+    data?.codes,
+    data?.code,
+    data?.activationCodes,
+    data?.activationCode,
+    data?.sn,
+  ];
+  for (const item of candidates) {
+    const parsed = parseCodeList(item);
+    if (parsed.length) return parsed;
+  }
+  return [];
 }
 
 async function ensureSeedCode(db: D1Database, seedCode: string, expiresInDays: number, maxUses: number) {
