@@ -295,21 +295,21 @@ async function loadList(){
     tbody.innerHTML = rows.map((x) => {
       const checked = selectedCodes.has(x.code) ? "checked" : "";
       const statusText = x.status === "active" ? "启用" : "禁用";
-      return "<tr>"
-        + "<td><input type=\\"checkbox\\" data-act=\\"pick\\" data-code=\\"" + esc(x.code) + "\\" " + checked + " /></td>"
-        + "<td class=\\"mono\\">" + esc(x.code) + "</td>"
-        + "<td>" + fmtCardType(x.cardType) + "</td>"
-        + "<td><span class=\\"badge " + (x.status === "active" ? "active" : "disabled") + "\\">" + statusText + "</span></td>"
-        + "<td>" + x.usedCount + "/" + x.maxUses + "</td>"
-        + "<td>" + (x.deviceCount || 0) + "/" + (x.deviceLimit || 1) + "</td>"
-        + "<td>" + fmtTs(x.activatedAt) + "</td>"
-        + "<td>" + fmtTs(x.expiresAt) + "</td>"
-        + "<td class=\\"row\\">"
-        + "<button data-act=\\"devices\\" data-code=\\"" + esc(x.code) + "\\" class=\\"secondary\\">设备</button>"
-        + "<button data-act=\\"disable\\" data-code=\\"" + esc(x.code) + "\\" class=\\"danger\\">禁用</button>"
-        + "<button data-act=\\"renew\\" data-code=\\"" + esc(x.code) + "\\" class=\\"secondary\\">续期+7天</button>"
-        + "</td>"
-        + "</tr>";
+      return '<tr>'
+        + '<td><input type="checkbox" data-act="pick" data-code="' + esc(x.code) + '" ' + checked + ' /></td>'
+        + '<td class="mono">' + esc(x.code) + '</td>'
+        + '<td>' + fmtCardType(x.cardType) + '</td>'
+        + '<td><span class="badge ' + (x.status === "active" ? "active" : "disabled") + '">' + statusText + '</span></td>'
+        + '<td>' + x.usedCount + '/' + x.maxUses + '</td>'
+        + '<td>' + (x.deviceCount || 0) + '/' + (x.deviceLimit || 1) + '</td>'
+        + '<td>' + fmtTs(x.activatedAt) + '</td>'
+        + '<td>' + fmtTs(x.expiresAt) + '</td>'
+        + '<td class="row">'
+        + '<button data-act="devices" data-code="' + esc(x.code) + '" class="secondary">设备</button>'
+        + '<button data-act="disable" data-code="' + esc(x.code) + '" class="danger">禁用</button>'
+        + '<button data-act="renew" data-code="' + esc(x.code) + '" class="secondary">续期+7天</button>'
+        + '</td>'
+        + '</tr>';
     }).join("");
     pageInfo.textContent = "第 " + pagination.page + "/" + pagination.totalPages + " 页";
     listMsg.textContent = "共 " + (pagination.total || 0) + " 条";
@@ -366,17 +366,17 @@ async function loadDevicesPage() {
       
       return "<tr>"
         + '<td><input type="checkbox" data-act="pickDevice" data-device="' + esc(d.deviceId) + '" ' + checked + ' /></td>'
-        + "<td class=\"mono\">" + esc(d.deviceId) + "</td>"
-        + "<td>" + esc(d.deviceName) + "</td>"
-        + "<td>" + status + "</td>"
-        + "<td>" + validUntil + "</td>"
-        + "<td>" + esc(d.activationCount) + "</td>"
-        + "<td>" + (d.lastSeenAt ? new Date(Number(d.lastSeenAt) * 1000).toLocaleString() : "-") + "</td>"
-        + "<td class=\"row\">"
-        + "<button data-act=\"viewDevice\" data-device=\"" + esc(d.deviceId) + "\" class=\"secondary\">查看激活</button>"
-        + "<button data-act=\"deleteDevice\" data-device=\"" + esc(d.deviceId) + "\" class=\"danger\">删除</button>"
-        + "</td>"
-        + "</tr>";
+        + '<td class="mono">' + esc(d.deviceId) + '</td>'
+        + '<td>' + esc(d.deviceName) + '</td>'
+        + '<td>' + status + '</td>'
+        + '<td>' + validUntil + '</td>'
+        + '<td>' + esc(d.activationCount) + '</td>'
+        + '<td>' + (d.lastSeenAt ? new Date(Number(d.lastSeenAt) * 1000).toLocaleString() : "-") + '</td>'
+        + '<td class="row">'
+        + '<button data-act="viewDevice" data-device="' + esc(d.deviceId) + '" class="secondary">查看激活</button>'
+        + '<button data-act="deleteDevice" data-device="' + esc(d.deviceId) + '" class="danger">删除</button>'
+        + '</td>'
+        + '</tr>';
     }).join("");
     
     devicePageInfo.textContent = "第 " + devicePagination.page + "/" + devicePagination.totalPages + " 页";
