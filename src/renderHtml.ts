@@ -105,51 +105,44 @@ export function renderAdminPage() {
   <button id="logoutBtn" class="secondary right">退出登录</button>
 </div>
 
-<div class="grid">
-  <div class="card">
-    <h3>创建激活码</h3>
-    <p class="muted">格式: <code>XXXX-XXXX-XXXX-XXXX</code>。</p>
-    <div class="row">
-      <div><label>数量</label><input id="count" type="number" min="1" max="200" value="1" /></div>
-      <div><label>卡类型</label><select id="cardType"><option value="day">天卡</option><option value="week">周卡</option><option value="month" selected>月卡</option><option value="trial">体验卡</option><option value="trial3h">体验卡3小时</option><option value="permanent">永久卡</option></select></div>
-      <div><label>最大使用次数</label><input id="maxUses" type="number" min="1" value="1" /></div>
-      <div><label>设备限制</label><input id="deviceLimit" type="number" min="1" value="1" /></div>
-    </div>
-    <div class="row">
-      <div><label>前缀(可选)</label><input id="prefix" value="SN" /></div>
-      <div style="min-width:220px"><label>发放给</label><input id="issuedTo" placeholder="team-a" /></div>
-      <div style="flex:1"><label>备注</label><input id="note" placeholder="description" style="width:100%" /></div>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <button id="createBtn">创建</button>
-      <span id="createMsg" class="muted"></span>
-    </div>
-    <pre id="createDetail" class="muted mono" style="white-space:pre-wrap;margin-top:8px;"></pre>
+<div class="card">
+  <h3>创建激活码</h3>
+  <p class="muted">格式: <code>XXXX-XXXX-XXXX-XXXX</code>。</p>
+  <div class="row">
+    <div><label>数量</label><input id="count" type="number" min="1" max="200" value="1" /></div>
+    <div><label>卡类型</label><select id="cardType"><option value="day">天卡</option><option value="week">周卡</option><option value="month" selected>月卡</option><option value="trial">体验卡</option><option value="trial3h">体验卡3小时</option><option value="permanent">永久卡</option></select></div>
+    <div><label>最大使用次数</label><input id="maxUses" type="number" min="1" value="1" /></div>
+    <div><label>设备限制</label><input id="deviceLimit" type="number" min="1" value="1" /></div>
   </div>
-
-  <div class="card">
-    <h3>设备树</h3>
-    <p class="muted">通过 deviceId/deviceName/code 搜索设备，然后以树形结构查看绑定的激活码。</p>
-    <div class="row">
-      <input id="deviceKw" placeholder="设备关键字" style="min-width:240px" />
-      <button id="deviceQueryBtn" class="secondary">查询</button>
-      <span id="deviceTreeMsg" class="muted"></span>
-    </div>
-    <div id="deviceTree" class="tree" style="margin-top:10px;"></div>
+  <div class="row">
+    <div><label>前缀(可选)</label><input id="prefix" value="SN" /></div>
+    <div style="min-width:220px"><label>发放给</label><input id="issuedTo" placeholder="team-a" /></div>
+    <div style="flex:1"><label>备注</label><input id="note" placeholder="description" style="width:100%" /></div>
   </div>
+  <div class="row" style="margin-top:8px">
+    <button id="createBtn">创建</button>
+    <span id="createMsg" class="muted"></span>
+  </div>
+  <pre id="createDetail" class="muted mono" style="white-space:pre-wrap;margin-top:8px;"></pre>
 </div>
 
 <div class="card">
   <div class="row">
     <h3>设备管理</h3>
     <input id="deviceSearchKw" placeholder="搜索设备ID/名称/激活码" />
-    <button id="deviceSearchBtn" class="secondary">搜索设备</button>
+    <button id="deviceSearchBtn" class="secondary">搜索</button>
     <button id="devicePrevBtn" class="secondary">上一页</button>
     <button id="deviceNextBtn" class="secondary">下一页</button>
     <span id="devicePageInfo" class="muted"></span>
   </div>
+  <div class="row" style="margin-bottom:8px;">
+    <span id="deviceSelectedInfo" class="muted">已选择: 0</span>
+    <button id="deviceBatchDeleteBtn" class="danger">批量删除</button>
+    <span id="deviceBatchMsg" class="muted"></span>
+  </div>
   <table>
     <thead><tr>
+      <th><input id="deviceCheckAll" type="checkbox" /></th>
       <th>设备ID</th>
       <th>设备名称</th>
       <th>激活状态</th>
@@ -231,6 +224,7 @@ const selectedCodes = new Set();
 
 let devicePage = 1;
 let devicePagination = { page:1, totalPages:1, total:0 };
+const selectedDevices = new Set();
 
 const meEl = document.getElementById("me");
 const tbody = document.getElementById("tbody");
@@ -243,8 +237,6 @@ const deviceTbody = document.getElementById("deviceTbody");
 const batchMsg = document.getElementById("batchMsg");
 const selectedInfo = document.getElementById("selectedInfo");
 const checkAll = document.getElementById("checkAll");
-const deviceTree = document.getElementById("deviceTree");
-const deviceTreeMsg = document.getElementById("deviceTreeMsg");
 
 const deviceTbodyMain = document.getElementById("deviceTbodyMain");
 const deviceListMsg = document.getElementById("deviceListMsg");
@@ -252,6 +244,9 @@ const devicePageInfo = document.getElementById("devicePageInfo");
 const deviceActivationModal = document.getElementById("deviceActivationModal");
 const deviceActivationTbody = document.getElementById("deviceActivationTbody");
 const deviceActivationInfo = document.getElementById("deviceActivationInfo");
+const deviceSelectedInfo = document.getElementById("deviceSelectedInfo");
+const deviceCheckAll = document.getElementById("deviceCheckAll");
+const deviceBatchMsg = document.getElementById("deviceBatchMsg");
 
 async function api(path, init) {
   const r = await fetch(path, init);
@@ -275,6 +270,8 @@ function esc(v){
 }
 function getSelectedCodes(){ return Array.from(selectedCodes.values()); }
 function syncSelectedInfo(){ selectedInfo.textContent = "已选择: " + selectedCodes.size; }
+function syncDeviceSelectedInfo(){ deviceSelectedInfo.textContent = "已选择: " + selectedDevices.size; }
+function getSelectedDevices(){ return Array.from(selectedDevices.values()); }
 
 async function ensureLogin() {
   try {
@@ -344,41 +341,6 @@ async function loadDevices(code){
   }
 }
 
-async function loadDeviceTree(){
-  deviceTreeMsg.className = "muted";
-  deviceTreeMsg.textContent = "加载中...";
-  deviceTree.innerHTML = "";
-  try {
-    const keyword = document.getElementById("deviceKw").value.trim();
-    const q = new URLSearchParams({ keyword });
-    const j = await api("/admin/devices/tree?" + q.toString());
-    const rows = j.data || [];
-    deviceTree.innerHTML = rows.length ? rows.map((d) => {
-      const children = (d.children || []).map((c) => "<tr>"
-        + "<td class=\\"mono\\">" + esc(c.code) + "</td>"
-        + "<td>" + (c.status === "active" ? "启用" : "禁用") + "</td>"
-        + "<td>" + fmtTs(c.expiresAt) + "</td>"
-        + "<td>" + esc(c.usedCount) + "/" + esc(c.maxUses) + "</td>"
-        + "<td>" + esc(c.useCount) + "</td>"
-        + "<td>" + fmtTs(c.lastSeenAt) + "</td>"
-        + "</tr>").join("");
-      return "<details><summary><span class=\\"mono\\">" + esc(d.deviceId) + "</span> "
-        + esc(d.deviceName || "")
-        + " | 激活码: " + esc(d.codeCount)
-        + " | 使用: " + esc(d.totalUses)
-        + " | 最后: " + fmtTs(d.lastSeenAt)
-        + "</summary><div style=\\"margin-top:8px\\"><table><thead><tr><th>激活码</th><th>状态</th><th>过期时间</th><th>使用次数</th><th>设备使用</th><th>最后出现</th></tr></thead><tbody>"
-        + children
-        + "</tbody></table></div></details>";
-    }).join("") : "<div class=\\"muted\\">未找到设备</div>";
-    deviceTreeMsg.className = "ok";
-    deviceTreeMsg.textContent = "已加载: " + rows.length + " 条";
-  } catch (e) {
-    deviceTreeMsg.className = "err";
-    deviceTreeMsg.textContent = String(e);
-  }
-}
-
 async function loadDevicesPage() {
   deviceListMsg.className = "muted";
   deviceListMsg.textContent = "加载中...";
@@ -394,6 +356,7 @@ async function loadDevicesPage() {
     const rows = j.data || [];
     
     deviceTbodyMain.innerHTML = rows.map((d) => {
+      const checked = selectedDevices.has(d.deviceId) ? "checked" : "";
       const status = d.deviceStatus === "active" ? 
         '<span class="badge active">有效</span>' : 
         '<span class="badge disabled">过期</span>';
@@ -402,18 +365,24 @@ async function loadDevicesPage() {
         (d.deviceStatus === "active" ? "永久" : "已过期");
       
       return "<tr>"
-        + "<td class=\\"mono\\">" + esc(d.deviceId) + "</td>"
+        + "<td><input type=\"checkbox\" data-act=\"pickDevice\" data-device=\"" + esc(d.deviceId) + "\" " + checked + " /></td>"
+        + "<td class=\"mono\">" + esc(d.deviceId) + "</td>"
         + "<td>" + esc(d.deviceName) + "</td>"
         + "<td>" + status + "</td>"
         + "<td>" + validUntil + "</td>"
         + "<td>" + esc(d.activationCount) + "</td>"
         + "<td>" + (d.lastSeenAt ? new Date(Number(d.lastSeenAt) * 1000).toLocaleString() : "-") + "</td>"
-        + "<td><button data-act=\\"viewDevice\\" data-device=\\"" + esc(d.deviceId) + "\\" class=\\"secondary\\">查看激活</button></td>"
+        + "<td class=\"row\">"
+        + "<button data-act=\"viewDevice\" data-device=\"" + esc(d.deviceId) + "\" class=\"secondary\">查看激活</button>"
+        + "<button data-act=\"deleteDevice\" data-device=\"" + esc(d.deviceId) + "\" class=\"danger\">删除</button>"
+        + "</td>"
         + "</tr>";
     }).join("");
     
     devicePageInfo.textContent = "第 " + devicePagination.page + "/" + devicePagination.totalPages + " 页";
     deviceListMsg.textContent = "共 " + (devicePagination.total || 0) + " 台设备";
+    syncDeviceSelectedInfo();
+    deviceCheckAll.checked = rows.length > 0 && rows.every((d) => selectedDevices.has(d.deviceId));
   } catch (e) {
     deviceListMsg.className = "err";
     deviceListMsg.textContent = String(e);
@@ -472,7 +441,7 @@ tbody.addEventListener("click", async (e) => {
       });
     }
     await loadList();
-    await loadDeviceTree();
+
     await loadDevicesPage();
   } catch (e2) {
     alert(String(e2));
@@ -520,7 +489,7 @@ document.getElementById("batchDisableBtn").addEventListener("click", async () =>
     batchMsg.className = "ok";
     batchMsg.textContent = "已禁用 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
     await loadList();
-    await loadDeviceTree();
+
     await loadDevicesPage();
   } catch (e) {
     batchMsg.className = "err";
@@ -539,7 +508,7 @@ document.getElementById("batchRenewBtn").addEventListener("click", async () => {
     batchMsg.className = "ok";
     batchMsg.textContent = "已续期 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
     await loadList();
-    await loadDeviceTree();
+
     await loadDevicesPage();
   } catch (e) {
     batchMsg.className = "err";
@@ -559,7 +528,7 @@ document.getElementById("batchDeleteBtn").addEventListener("click", async () => 
     batchMsg.className = "ok";
     batchMsg.textContent = "已删除 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
     await loadList();
-    await loadDeviceTree();
+
     await loadDevicesPage();
   } catch (e) {
     batchMsg.className = "err";
@@ -570,7 +539,6 @@ document.getElementById("batchDeleteBtn").addEventListener("click", async () => 
 document.getElementById("queryBtn").addEventListener("click", () => { page = 1; loadList(); });
 document.getElementById("prevBtn").addEventListener("click", () => { if (page > 1) { page -= 1; loadList(); } });
 document.getElementById("nextBtn").addEventListener("click", () => { if (page < (pagination.totalPages || 1)) { page += 1; loadList(); } });
-document.getElementById("deviceQueryBtn").addEventListener("click", loadDeviceTree);
 
 document.getElementById("createBtn").addEventListener("click", async () => {
   createMsg.className = "muted";
@@ -596,7 +564,7 @@ document.getElementById("createBtn").addEventListener("click", async () => {
     createMsg.textContent = "已创建: " + created.length;
     createDetail.textContent = created.map((x) => x.code).join("\\n");
     await loadList();
-    await loadDeviceTree();
+
     await loadDevicesPage();
   } catch (e) {
     createMsg.className = "err";
@@ -625,6 +593,36 @@ deviceTbodyMain.addEventListener("click", async (e) => {
   if (act === "viewDevice") {
     await loadDeviceActivations(deviceId);
   }
+  if (act === "deleteDevice") {
+    if (!confirm("确定删除设备 " + deviceId + " 吗？此操作不可撤销。")) return;
+    try {
+      await api("/admin/devices/" + encodeURIComponent(deviceId), { method: "DELETE" });
+      await loadDevicesPage();
+    } catch (e2) {
+      alert(String(e2));
+    }
+  }
+});
+
+deviceTbodyMain.addEventListener("change", (e) => {
+  const t = e.target;
+  if (!t.dataset || t.dataset.act !== "pickDevice") return;
+  const deviceId = t.dataset.device;
+  if (!deviceId) return;
+  if (t.checked) selectedDevices.add(deviceId); else selectedDevices.delete(deviceId);
+  syncDeviceSelectedInfo();
+});
+
+deviceCheckAll.addEventListener("change", () => {
+  const boxes = Array.from(document.querySelectorAll("input[data-act='pickDevice']"));
+  boxes.forEach((b) => {
+    b.checked = deviceCheckAll.checked;
+    const deviceId = b.dataset.device;
+    if (deviceId) {
+      if (deviceCheckAll.checked) selectedDevices.add(deviceId); else selectedDevices.delete(deviceId);
+    }
+  });
+  syncDeviceSelectedInfo();
 });
 
 deviceActivationTbody.addEventListener("click", async (e) => {
@@ -677,6 +675,33 @@ document.getElementById("deviceNextBtn").addEventListener("click", () => {
   } 
 });
 
+document.getElementById("deviceBatchDeleteBtn").addEventListener("click", async () => {
+  deviceBatchMsg.className = "muted";
+  deviceBatchMsg.textContent = "处理中...";
+  try {
+    const deviceIds = getSelectedDevices();
+    if (!deviceIds.length) {
+      deviceBatchMsg.className = "err";
+      deviceBatchMsg.textContent = "请先选择设备";
+      return;
+    }
+    if (!confirm("确定批量删除选中的 " + deviceIds.length + " 台设备吗？此操作不可撤销。")) return;
+    const j = await api("/admin/devices/batch-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceIds })
+    });
+    selectedDevices.clear();
+    syncDeviceSelectedInfo();
+    deviceBatchMsg.className = "ok";
+    deviceBatchMsg.textContent = "已删除 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
+    await loadDevicesPage();
+  } catch (e) {
+    deviceBatchMsg.className = "err";
+    deviceBatchMsg.textContent = String(e);
+  }
+});
+
 document.getElementById("logoutBtn").addEventListener("click", async () => { 
   await fetch("/web/logout", { method:"POST" }); 
   location.href = "/admin/login"; 
@@ -684,7 +709,6 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 
 ensureLogin();
 loadList();
-loadDeviceTree();
 loadDevicesPage();`,
   );
 }

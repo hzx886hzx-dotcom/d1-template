@@ -248,6 +248,7 @@ export async function batchRenewCodes(
 export async function batchDeleteCodes(db: D1Database, codes: string[]): Promise<BatchOperationResult> {
   let affected = 0;
   for (const code of codes) {
+    await db.prepare("DELETE FROM device_activations WHERE activation_code = ?").bind(code).run();
     const changed = Number(
       (await db.prepare("DELETE FROM activation_codes WHERE code = ?").bind(code).run()).meta?.changes || 0
     );

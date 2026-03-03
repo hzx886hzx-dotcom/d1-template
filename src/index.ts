@@ -11,10 +11,11 @@ import {
   handleBatchDelete,
   handleDisableCode,
   handleRenewCode,
-  handleDeviceTree,
   handleDevicesList,
   handleDeviceActivations,
   handleDeviceRenew,
+  handleDeleteDevice,
+  handleBatchDeleteDevices,
 } from "./routes/admin";
 import { handleWebLogin, handleWebLogout, handleWebMe, handleWebScheme } from "./routes/web";
 import { parseRequestBody, json } from "./utils/helpers";
@@ -118,10 +119,6 @@ export default {
         return handleRenewCode(request, env.DB, decodeURIComponent(renewMatch[1]), body);
       }
 
-      if (method === "GET" && pathname === "/admin/devices/tree") {
-        return handleDeviceTree(request, env.DB, url);
-      }
-
       if (method === "GET" && pathname === "/admin/devices") {
         return handleDevicesList(request, env.DB, url);
       }
@@ -134,6 +131,16 @@ export default {
       if (method === "POST" && pathname === "/admin/devices/renew") {
         const { body } = await parseRequestBody(request);
         return handleDeviceRenew(request, env.DB, body);
+      }
+
+      const deleteDeviceMatch = pathname.match(/^\/admin\/devices\/([^/]+)$/);
+      if (method === "DELETE" && deleteDeviceMatch) {
+        return handleDeleteDevice(request, env.DB, decodeURIComponent(deleteDeviceMatch[1]));
+      }
+
+      if (method === "POST" && pathname === "/admin/devices/batch-delete") {
+        const { body } = await parseRequestBody(request);
+        return handleBatchDeleteDevices(request, env.DB, body);
       }
 
       return json(404, { code: 404, msg: "not found" });

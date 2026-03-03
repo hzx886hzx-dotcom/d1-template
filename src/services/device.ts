@@ -344,81 +344,36 @@ export async function listDevicesPage(
   };
 }
 
-export async function listDeviceTree(db: D1Database, keywordRaw: string): Promise<DeviceTreeNode[]> {
-  const keyword = String(keywordRaw || "").trim().toUpperCase();
-  const where = keyword
-    ? "WHERE (UPPER(d.device_id) LIKE ? OR UPPER(d.device_name) LIKE ? OR UPPER(da.activation_code) LIKE ?)"
-    : "";
-  const binds: string[] = keyword ? [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`] : [];
+export async function deleteDevice(db: D1Database, deviceId: string): Promise<{ ok: boolean; msg?: string }> {
+  const deviceIdNorm = normalizeCode(deviceId);
 
-  const rows = await db.prepare(`
-    SELECT
-      d.device_id,
-      d.device_name,
-      da.activation_code as code,
-      da.expires_at,
-      da.is_active as activation_active,
-      ac.status as code_status,
-      ac.max_uses,
-      ac.used_count,
-      ac.card_type
-    FROM devices d
-    INNER JOIN device_activations da ON d.device_id = da.device_id
-    INNER JOIN activation_codes ac ON da.activation_code = ac.code
-    ${where}
-    ORDER BY d.device_id ASC, da.activated_at DESC
-  `).bind(...binds).all<{
-    device_id: string;
-    device_name: string;
-    code: string;
-    expires_at: number;
-    activation_active: number;
-    code_status: string;
-    max_uses: number;
-    used_count: number;
-    card_type: string;
-  }>();
+  const device = await db.prepare(
+    "SELECT device_id FROM devices WHERE device_id = ? LIMIT 1"
+  ).bind(deviceIdNorm).first<{ device_id: string }>();
 
-  const deviceMap = new Map<string, DeviceTreeNode>();
-
-  for (const row of rows.results || []) {
-    const key = normalizeCode(row.device_id || "UNKNOWN");
-    if (!deviceMap.has(key)) {
-      const device = await db.prepare(
-        "SELECT last_seen_at FROM devices WHERE device_id = ? LIMIT 1"
-      ).bind(key).first<{ last_seen_at: number }>();
-
-      deviceMap.set(key, {
-        deviceId: key,
-        deviceName: String(row.device_name || ""),
-        totalUses: 0,
-        codeCount: 0,
-        lastSeenAt: device ? Number(device.last_seen_at || 0) : 0,
-        children: [],
-      });
-    }
-
-    const node = deviceMap.get(key)!;
-    node.codeCount += 1;
-
-    const useCount = Number(
-      (await db.prepare(
-        "SELECT use_count FROM device_activations WHERE device_id = ? AND activation_code = ? LIMIT 1"
-      ).bind(key, row.code).first<{ use_count: number }>())?.use_count || 0
-    );
-
-    node.totalUses += useCount;
-
-    node.children.push({
-      code: String(row.code || ""),
-      status: String(row.code_status || ""),
-      expiresAt: Number(row.expires_at || 0),
-      maxUses: Number(row.max_uses || 0),
-      usedCount: Number(row.used_count || 0),
-      isActive: Boolean(row.activation_active || 0),
-      cardType: String(row.card_type || "month"),
-    });
+  if (!device) {
+    return { ok: false, msg: "device not found" };
   }
 
-  return [...deviceMap.values()];
+  await db.prepare("DELETE FROM device_activations WHERE device_id = ?").bind(deviceIdNorm).run();
+  await db.prepare("DELETE FROM devices WHERE device_id = ?").bind(deviceIdNorm).run();
+
+  return { ok: true };
+}
+
+export async function batchDeleteDevices(db: D1Database, deviceIds: string[]): Promise<{ affected: number; requested: number }> {
+  if (!deviceIds || deviceIds.length === 0) {
+    return { affected: 0, requested: 0 };
+  }
+
+  const normalizedIds = deviceIds.map(id => normalizeCode(id));
+  let affected = 0;
+
+  for (const deviceId of normalizedIds) {
+    await db.prepare("DELETE FROM device_activations WHERE device_id = ?").bind(deviceId).run();
+    const result = await db.prepare("DELETE FROM devices WHERE device_id = ?").bind(deviceId).run();
+    affected += result.meta.changes || 0;
+  }
+
+  return { affected, requested: normalizedIds.length };
 }

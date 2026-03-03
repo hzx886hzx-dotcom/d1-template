@@ -10,10 +10,11 @@ import {
   getCodeUsages,
 } from "../services/activationCode";
 import {
-  listDeviceTree,
   listDevicesPage,
   getDeviceActivations,
   renewDeviceActivation,
+  deleteDevice,
+  batchDeleteDevices,
 } from "../services/device";
 import { resolveCardSpec, extractCodesFromBody, normalizeCode, json } from "../utils/helpers";
 
@@ -154,19 +155,6 @@ export async function handleRenewCode(
   return json(200, { code: 200, msg: "ok", data: result.data });
 }
 
-export async function handleDeviceTree(
-  request: Request,
-  db: D1Database,
-  url: URL
-): Promise<Response> {
-  const admin = await requireAdmin(request, db);
-  if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
-
-  const keyword = String(url.searchParams.get("keyword") || "");
-  const data = await listDeviceTree(db, keyword);
-  return json(200, { code: 200, msg: "ok", data });
-}
-
 export async function handleDevicesList(
   request: Request,
   db: D1Database,
@@ -218,4 +206,32 @@ export async function handleDeviceRenew(
 
   if (!result.ok) return json(400, { code: 400, msg: result.msg });
   return json(200, { code: 200, msg: "ok", data: result.data });
+}
+
+export async function handleDeleteDevice(
+  request: Request,
+  db: D1Database,
+  deviceId: string
+): Promise<Response> {
+  const admin = await requireAdmin(request, db);
+  if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
+
+  const result = await deleteDevice(db, normalizeCode(deviceId));
+  if (!result.ok) return json(404, { code: 404, msg: result.msg });
+  return json(200, { code: 200, msg: "ok" });
+}
+
+export async function handleBatchDeleteDevices(
+  request: Request,
+  db: D1Database,
+  body: Record<string, unknown>
+): Promise<Response> {
+  const admin = await requireAdmin(request, db);
+  if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
+
+  const deviceIds = (body.deviceIds as string[]) || [];
+  if (!deviceIds.length) return json(400, { code: 400, msg: "deviceIds is required" });
+
+  const result = await batchDeleteDevices(db, deviceIds);
+  return json(200, { code: 200, msg: "ok", data: result });
 }
