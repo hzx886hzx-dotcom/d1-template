@@ -157,13 +157,13 @@ export default {
         const iat = nowSec();
         const exp = iat + cfg.tokenTtlSec;
         await env.DB.prepare("INSERT OR REPLACE INTO admin_sessions (sid, username, iat, exp) VALUES (?, ?, ?, ?)").bind(sid, cfg.adminUsername, iat, exp).run();
-        return json(200, { code: 200, msg: "ok" }, { "Set-Cookie": makeSessionCookie("admin_session", sid, cfg.tokenTtlSec) });
+        return json(200, { code: 200, msg: "ok" }, { "Set-Cookie": makeSessionCookie("admin_session", sid, cfg.tokenTtlSec, isHttpsRequest(request)) });
       }
 
       if (method === "POST" && pathname === "/web/logout") {
         const sid = readCookie(request.headers.get("cookie") || "", "admin_session");
         if (sid) await env.DB.prepare("DELETE FROM admin_sessions WHERE sid = ?").bind(sid).run();
-        return json(200, { code: 200, msg: "ok" }, { "Set-Cookie": "admin_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0" });
+        return json(200, { code: 200, msg: "ok" }, { "Set-Cookie": clearSessionCookie("admin_session", isHttpsRequest(request)) });
       }
 
       if (method === "GET" && pathname === "/web/me") {
@@ -292,8 +292,22 @@ function randomHex(byteLen: number) {
   crypto.getRandomValues(buf);
   return Array.from(buf).map((x) => x.toString(16).padStart(2, "0")).join("");
 }
-function makeSessionCookie(name: string, value: string, maxAge: number) {
-  return `${name}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${Math.max(1, Math.floor(maxAge))}`;
+function makeSessionCookie(name: string, value: string, maxAge: number, secure: boolean) {
+  const securePart = secure ? "; Secure" : "";
+  return `${name}=${value}; HttpOnly${securePart}; SameSite=Lax; Path=/; Max-Age=${Math.max(1, Math.floor(maxAge))}`;
+}
+function clearSessionCookie(name: string, secure: boolean) {
+  const securePart = secure ? "; Secure" : "";
+  return `${name}=; HttpOnly${securePart}; SameSite=Lax; Path=/; Max-Age=0`;
+}
+function isHttpsRequest(request: Request) {
+  const xfProto = (request.headers.get("x-forwarded-proto") || "").toLowerCase();
+  if (xfProto) return xfProto === "https";
+  try {
+    return new URL(request.url).protocol === "https:";
+  } catch {
+    return true;
+  }
 }
 function readCookie(rawCookie: string, key: string) {
   for (const part of rawCookie.split(";").map((x) => x.trim())) {
@@ -701,5 +715,4 @@ function executeStrategyWithConfig(config: StrategyConfig, payload: StrategyPayl
     multiple: Math.max(1, Math.floor(Number(config.multiple || 1))),
   };
 }
-
 
