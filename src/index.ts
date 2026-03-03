@@ -545,7 +545,6 @@ function readExternalToken(token: string, cfg: RuntimeConfig): { sn: string; dev
   try {
     const payload = sm4Decrypt(token, cfg) as Record<string, unknown>;
     const exp = Number(payload.exp || 0);
-    if (exp < nowSec()) return null;
     return { sn: normalizeCode(payload.sn), device_id: normalizeCode(payload.device_id), exp };
   } catch {
     return null;
