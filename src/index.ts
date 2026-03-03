@@ -28,6 +28,9 @@ type ActivationCodeRow = {
   status: string;
   created_at: number;
   expires_at: number;
+  card_type: string;
+  duration_sec: number;
+  activated_at: number | null;
   max_uses: number;
   used_count: number;
   last_used_at: number | null;
@@ -44,11 +47,21 @@ const INTERNAL_STRATEGY: InternalStrategyConfig = { take: 6, min: 0, max: 27, mu
 let cachedCfg: { key: string; value: RuntimeConfig } | null = null;
 let bootstrapDone = false;
 
+const CARD_TYPE_SECONDS: Record<string, number> = {
+  day: 86400,
+  week: 7 * 86400,
+  month: 30 * 86400,
+  trial: 24 * 3600,
+  trial3h: 3 * 3600,
+  permanent: 0,
+};
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       const cfg = await getConfig(env);
       await bootstrapIfNeeded(env, cfg);
+      await cleanupExpiredCodes(env.DB);
       const url = new URL(request.url);
       const method = request.method.toUpperCase();
       const pathname = url.pathname;
@@ -91,6 +104,8 @@ export default {
           activation: {
             sn: validated.record.code,
             status: validated.record.status,
+            cardType: String(validated.record.card_type || "month"),
+            activatedAt: validated.record.activated_at ? Number(validated.record.activated_at) : null,
             expiresAt: Number(validated.record.expires_at || 0),
             maxUses: Number(validated.record.max_uses || 0),
             usedCount: Number(validated.record.used_count || 0),
@@ -214,9 +229,11 @@ export default {
         const admin = await requireAdmin(request, env);
         if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
         const { body } = await parseRequestBody(request);
+        const cardSpec = resolveCardSpec(body.cardType);
         const created = await createCodes(env.DB, {
           count: Number(body.count || 1),
-          expiresInDays: Number(body.expiresInDays || 30),
+          cardType: cardSpec.type,
+          durationSec: cardSpec.durationSec,
           maxUses: Number(body.maxUses || 1),
           deviceLimit: Number(body.deviceLimit || 1),
           prefix: String(body.prefix || "SN"),
@@ -300,6 +317,33 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 function nowSec() { return Math.floor(Date.now() / 1000); }
+function normalizeCardType(input: unknown): string {
+  const raw = String(input || "").trim().toLowerCase();
+  if (!raw) return "month";
+  if (["day", "d", "天卡", "日卡", "1天", "1d"].includes(raw)) return "day";
+  if (["week", "w", "周卡", "7天", "7d"].includes(raw)) return "week";
+  if (["month", "m", "月卡", "30天", "30d"].includes(raw)) return "month";
+  if (["permanent", "forever", "lifetime", "永久", "永久卡"].includes(raw)) return "permanent";
+  if (["trial", "体验", "体验卡"].includes(raw)) return "trial";
+  if (["trial3h", "trial_3h", "3h", "体验卡3小时", "体验3小时"].includes(raw)) return "trial3h";
+  return "month";
+}
+function resolveCardSpec(input: unknown): { type: string; durationSec: number } {
+  const type = normalizeCardType(input);
+  return { type, durationSec: Number(CARD_TYPE_SECONDS[type] || CARD_TYPE_SECONDS.month) };
+}
+function computeExpireAt(type: string, activatedAt: number | null, durationSec: number): number {
+  if (type === "permanent") return 0;
+  if (!activatedAt) return 0;
+  const d = Math.max(0, Number(durationSec || 0));
+  return activatedAt + d;
+}
+function isCodeExpired(row: Pick<ActivationCodeRow, "card_type" | "expires_at" | "activated_at">, now: number) {
+  if (String(row.card_type || "") === "permanent") return false;
+  if (!Number(row.activated_at || 0)) return false;
+  const exp = Number(row.expires_at || 0);
+  return exp > 0 && exp < now;
+}
 function json(status: number, payload: Json, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
 }
@@ -351,6 +395,13 @@ function buildUsageContext(request: Request, body: Record<string, unknown>) {
     clientIp: String(request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || ""),
     userAgent: String(request.headers.get("user-agent") || ""),
   };
+}
+
+async function cleanupExpiredCodes(db: D1Database) {
+  const now = nowSec();
+  await db.prepare(
+    "DELETE FROM activation_codes WHERE card_type != 'permanent' AND activated_at IS NOT NULL AND expires_at > 0 AND expires_at < ?",
+  ).bind(now).run();
 }
 
 async function requireAdmin(request: Request, env: Env): Promise<{ username: string } | null> {
@@ -556,7 +607,10 @@ async function ensureSeedCode(db: D1Database, seedCode: string, expiresInDays: n
   const existing = await db.prepare("SELECT code FROM activation_codes WHERE code = ? LIMIT 1").bind(seedCode).first<{ code: string }>();
   if (existing) return;
   const now = nowSec();
-  await db.prepare("INSERT INTO activation_codes (code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at) VALUES (?, 'active', ?, ?, ?, 0, NULL, 'seed', 'system seed code', 1, ?)").bind(seedCode, now, now + expiresInDays * 86400, maxUses, now).run();
+  const durationSec = Math.max(1, Number(expiresInDays || 365)) * 86400;
+  await db.prepare(
+    "INSERT INTO activation_codes (code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at) VALUES (?, 'active', ?, 0, 'month', ?, NULL, ?, 0, NULL, 'seed', 'system seed code', 1, ?)",
+  ).bind(seedCode, now, durationSec, maxUses, now).run();
 }
 
 function formatCodeRow(row: ActivationCodeRow) {
@@ -565,6 +619,9 @@ function formatCodeRow(row: ActivationCodeRow) {
     status: row.status,
     createdAt: Number(row.created_at || 0),
     expiresAt: Number(row.expires_at || 0),
+    cardType: String(row.card_type || "month"),
+    durationSec: Number(row.duration_sec || CARD_TYPE_SECONDS.month),
+    activatedAt: row.activated_at ? Number(row.activated_at) : null,
     maxUses: Number(row.max_uses || 0),
     usedCount: Number(row.used_count || 0),
     lastUsedAt: row.last_used_at ? Number(row.last_used_at) : null,
@@ -576,10 +633,13 @@ function formatCodeRow(row: ActivationCodeRow) {
 
 async function createCodes(
   db: D1Database,
-  p: { count: number; expiresInDays: number; maxUses: number; prefix: string; issuedTo: string; note: string; deviceLimit: number },
+  p: { count: number; cardType: string; durationSec: number; maxUses: number; prefix: string; issuedTo: string; note: string; deviceLimit: number },
 ) {
   const c = Math.max(1, Math.min(200, Number(p.count || 1)));
-  const days = Math.max(1, Math.min(3650, Number(p.expiresInDays || 30)));
+  const cardType = normalizeCardType(p.cardType);
+  const durationSec = cardType === "permanent"
+    ? 0
+    : Math.max(3600, Math.min(3650 * 86400, Number(p.durationSec || CARD_TYPE_SECONDS.month)));
   const uses = Math.max(1, Math.min(1000000, Number(p.maxUses || 1)));
   const dl = Math.max(1, Math.min(20, Number(p.deviceLimit || 1)));
   const now = nowSec();
@@ -593,8 +653,25 @@ async function createCodes(
       code = randomCode(p.prefix);
     }
 
-    await db.prepare("INSERT INTO activation_codes (code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at) VALUES (?, 'active', ?, ?, ?, 0, NULL, ?, ?, ?, ?)").bind(code, now, now + days * 86400, uses, p.issuedTo, p.note, dl, now).run();
-    created.push({ code, status: "active", created_at: now, expires_at: now + days * 86400, max_uses: uses, used_count: 0, last_used_at: null, issued_to: p.issuedTo, note: p.note, device_limit: dl, updated_at: now });
+    await db.prepare(
+      "INSERT INTO activation_codes (code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at) VALUES (?, 'active', ?, 0, ?, ?, NULL, ?, 0, NULL, ?, ?, ?, ?)",
+    ).bind(code, now, cardType, durationSec, uses, p.issuedTo, p.note, dl, now).run();
+    created.push({
+      code,
+      status: "active",
+      created_at: now,
+      expires_at: 0,
+      card_type: cardType,
+      duration_sec: durationSec,
+      activated_at: null,
+      max_uses: uses,
+      used_count: 0,
+      last_used_at: null,
+      issued_to: p.issuedTo,
+      note: p.note,
+      device_limit: dl,
+      updated_at: now,
+    });
   }
 
   return created.map(formatCodeRow);
@@ -633,7 +710,7 @@ async function listCodesPage(db: D1Database, p: { page: number; pageSize: number
   const currentPage = Math.min(page, totalPages);
   const offset = (currentPage - 1) * pageSize;
 
-  const rows = await db.prepare(`SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...binds, pageSize, offset).all<ActivationCodeRow>();
+  const rows = await db.prepare(`SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...binds, pageSize, offset).all<ActivationCodeRow>();
   const data = (rows.results || []).map(formatCodeRow);
 
   for (const item of data) {
@@ -658,7 +735,7 @@ async function batchDisableCodes(db: D1Database, codes: string[]) {
 }
 
 async function renewCode(db: D1Database, code: string, p: { addDays: number; addUses: number; reactivate: boolean }) {
-  const record = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
+  const record = await db.prepare("SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
   if (!record) return { ok: false, msg: "activation code not found" };
 
   const days = Math.max(0, Number(p.addDays || 0));
@@ -666,12 +743,15 @@ async function renewCode(db: D1Database, code: string, p: { addDays: number; add
   if (days <= 0 && uses <= 0 && !p.reactivate) return { ok: false, msg: "nothing to renew" };
 
   const now = nowSec();
-  const nextExpire = days > 0 ? Math.max(now, Number(record.expires_at || 0)) + days * 86400 : Number(record.expires_at || 0);
+  const extraSec = days * 86400;
+  const currentDuration = Math.max(0, Number(record.duration_sec || 0));
+  const nextDuration = String(record.card_type || "month") === "permanent" ? 0 : (currentDuration + extraSec);
+  const nextExpire = computeExpireAt(String(record.card_type || "month"), Number(record.activated_at || 0) || null, nextDuration);
   const nextUses = uses > 0 ? Number(record.max_uses || 0) + uses : Number(record.max_uses || 0);
   const nextStatus = p.reactivate ? "active" : String(record.status || "active");
 
-  await db.prepare("UPDATE activation_codes SET expires_at = ?, max_uses = ?, status = ?, updated_at = ? WHERE code = ?").bind(nextExpire, nextUses, nextStatus, now, code).run();
-  const fresh = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
+  await db.prepare("UPDATE activation_codes SET expires_at = ?, duration_sec = ?, max_uses = ?, status = ?, updated_at = ? WHERE code = ?").bind(nextExpire, nextDuration, nextUses, nextStatus, now, code).run();
+  const fresh = await db.prepare("SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
   return { ok: true, data: fresh ? formatCodeRow(fresh) : null };
 }
 
@@ -684,15 +764,18 @@ async function batchRenewCodes(db: D1Database, codes: string[], p: { addDays: nu
   let affected = 0;
 
   for (const code of codes) {
-    const record = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
+    const record = await db.prepare("SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
     if (!record) continue;
-    const nextExpire = days > 0 ? Math.max(now, Number(record.expires_at || 0)) + days * 86400 : Number(record.expires_at || 0);
+    const extraSec = days * 86400;
+    const currentDuration = Math.max(0, Number(record.duration_sec || 0));
+    const nextDuration = String(record.card_type || "month") === "permanent" ? 0 : (currentDuration + extraSec);
+    const nextExpire = computeExpireAt(String(record.card_type || "month"), Number(record.activated_at || 0) || null, nextDuration);
     const nextUses = uses > 0 ? Number(record.max_uses || 0) + uses : Number(record.max_uses || 0);
     const nextStatus = p.reactivate ? "active" : String(record.status || "active");
-    const changed = Number((await db.prepare("UPDATE activation_codes SET expires_at = ?, max_uses = ?, status = ?, updated_at = ? WHERE code = ?").bind(nextExpire, nextUses, nextStatus, now, code).run()).meta?.changes || 0);
+    const changed = Number((await db.prepare("UPDATE activation_codes SET expires_at = ?, duration_sec = ?, max_uses = ?, status = ?, updated_at = ? WHERE code = ?").bind(nextExpire, nextDuration, nextUses, nextStatus, now, code).run()).meta?.changes || 0);
     affected += changed;
     if (changed > 0) {
-      const fresh = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
+      const fresh = await db.prepare("SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
       if (fresh) data.push(formatCodeRow(fresh));
     }
   }
@@ -798,12 +881,15 @@ async function listDeviceTree(db: D1Database, keywordRaw: string) {
 }
 
 async function validateAndConsumeCode(db: D1Database, code: string, usage: { deviceId: string; deviceName: string; appVersion: string; clientIp: string; userAgent: string }) {
-  const record = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
+  const record = await db.prepare("SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
   if (!record) return { ok: false as const, msg: "invalid activation code" };
 
   const now = nowSec();
   if (record.status !== "active") return { ok: false as const, msg: "activation code disabled" };
-  if (Number(record.expires_at || 0) < now) return { ok: false as const, msg: "activation code expired" };
+  if (isCodeExpired(record, now)) {
+    await db.prepare("DELETE FROM activation_codes WHERE code = ?").bind(code).run();
+    return { ok: false as const, msg: "activation code expired" };
+  }
   if (Number(record.used_count || 0) >= Number(record.max_uses || 0)) return { ok: false as const, msg: "activation code usage limit reached" };
 
   const currentDeviceId = normalizeCode(usage.deviceId || "UNKNOWN");
@@ -814,22 +900,30 @@ async function validateAndConsumeCode(db: D1Database, code: string, usage: { dev
   const deviceLimit = Math.max(1, Number(record.device_limit || 1));
   if (deviceCount >= deviceLimit) return { ok: false as const, msg: "activation code bound to another device" };
 
-  const updated = await db.prepare("UPDATE activation_codes SET used_count = used_count + 1, last_used_at = ?, updated_at = ? WHERE code = ? AND status = 'active' AND expires_at >= ? AND used_count < max_uses").bind(now, now, code, now).run();
+  const activatedAt = Number(record.activated_at || 0) || null;
+  const baseDuration = Math.max(0, Number(record.duration_sec || CARD_TYPE_SECONDS.month));
+  const computedExpireAt = computeExpireAt(String(record.card_type || "month"), activatedAt || now, baseDuration);
+  const updated = await db.prepare(
+    "UPDATE activation_codes SET used_count = used_count + 1, last_used_at = ?, updated_at = ?, activated_at = COALESCE(activated_at, ?), expires_at = CASE WHEN card_type = 'permanent' THEN 0 WHEN activated_at IS NULL THEN ? ELSE expires_at END WHERE code = ? AND status = 'active' AND used_count < max_uses AND (card_type = 'permanent' OR activated_at IS NULL OR expires_at >= ?)",
+  ).bind(now, now, now, computedExpireAt, code, now).run();
   if (Number(updated.meta?.changes || 0) <= 0) return { ok: false as const, msg: "activation code usage limit reached" };
 
   await db.prepare("INSERT INTO activation_code_devices (code, device_id, device_name, app_version, client_ip, user_agent, first_seen_at, last_seen_at, use_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)").bind(code, currentDeviceId, String(usage.deviceName || ""), String(usage.appVersion || ""), String(usage.clientIp || ""), String(usage.userAgent || ""), now, now).run();
 
-  const fresh = await db.prepare("SELECT code, status, created_at, expires_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
+  const fresh = await db.prepare("SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
   if (!fresh) return { ok: false as const, msg: "activation code update failed" };
   return { ok: true as const, record: fresh, deviceCount: deviceCount + 1 };
 }
 
 async function checkCodeAvailableForScheme(db: D1Database, code: string, deviceId: string) {
-  const record = await db.prepare("SELECT code, status, expires_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<{ code: string; status: string; expires_at: number }>();
+  const record = await db.prepare("SELECT code, status, expires_at, card_type, activated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<{ code: string; status: string; expires_at: number; card_type: string; activated_at: number | null }>();
   if (!record) return { ok: false as const, msg: "activation code not found" };
   const now = nowSec();
   if (record.status !== "active") return { ok: false as const, msg: "activation code disabled" };
-  if (Number(record.expires_at || 0) < now) return { ok: false as const, msg: "activation code expired" };
+  if (isCodeExpired({ card_type: record.card_type, expires_at: record.expires_at, activated_at: record.activated_at }, now)) {
+    await db.prepare("DELETE FROM activation_codes WHERE code = ?").bind(code).run();
+    return { ok: false as const, msg: "activation code expired" };
+  }
 
   const binding = await db.prepare("SELECT device_id FROM activation_code_devices WHERE code = ? AND device_id = ? LIMIT 1").bind(code, normalizeCode(deviceId)).first();
   if (!binding) return { ok: false as const, msg: "activation code device binding invalid" };

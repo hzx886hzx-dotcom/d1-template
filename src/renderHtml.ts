@@ -111,7 +111,7 @@ export function renderAdminPage() {
     <p class="muted">格式: <code>XXXX-XXXX-XXXX-XXXX</code>。</p>
     <div class="row">
       <div><label>数量</label><input id="count" type="number" min="1" max="200" value="1" /></div>
-      <div><label>有效期(天)</label><input id="days" type="number" min="1" value="30" /></div>
+      <div><label>卡类型</label><select id="cardType"><option value="day">天卡</option><option value="week">周卡</option><option value="month" selected>月卡</option><option value="trial">体验卡</option><option value="trial3h">体验卡3小时</option><option value="permanent">永久卡</option></select></div>
       <div><label>最大使用次数</label><input id="maxUses" type="number" min="1" value="1" /></div>
       <div><label>设备限制</label><input id="deviceLimit" type="number" min="1" value="1" /></div>
     </div>
@@ -159,7 +159,7 @@ export function renderAdminPage() {
     <span id="batchMsg" class="muted"></span>
   </div>
   <table>
-    <thead><tr><th><input id="checkAll" type="checkbox" /></th><th>激活码</th><th>状态</th><th>使用次数</th><th>设备数</th><th>过期时间</th><th>操作</th></tr></thead>
+    <thead><tr><th><input id="checkAll" type="checkbox" /></th><th>激活码</th><th>卡类型</th><th>状态</th><th>使用次数</th><th>设备数</th><th>激活时间</th><th>过期时间</th><th>操作</th></tr></thead>
     <tbody id="tbody"></tbody>
   </table>
   <div class="row"><span id="listMsg" class="muted"></span></div>
@@ -204,6 +204,16 @@ async function api(path, init) {
   return j;
 }
 function fmtTs(v){ if(!v) return "-"; return new Date(Number(v)*1000).toLocaleString(); }
+function fmtCardType(v){
+  const t = String(v || "").toLowerCase();
+  if (t === "day") return "天卡";
+  if (t === "week") return "周卡";
+  if (t === "month") return "月卡";
+  if (t === "trial") return "体验卡";
+  if (t === "trial3h") return "体验卡3小时";
+  if (t === "permanent") return "永久卡";
+  return t || "-";
+}
 function esc(v){ return String(v ?? "").replace(/[<>&"]/g, (m) => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;", "":"&quot;" }[m])); }
 function getSelectedCodes(){ return Array.from(selectedCodes.values()); }
 function syncSelectedInfo(){ selectedInfo.textContent = "已选择: " + selectedCodes.size; }
@@ -233,9 +243,11 @@ async function loadList(){
       return "<tr>"
         + "<td><input type=\\\"checkbox\\\" data-act=\\\"pick\\\" data-code=\\\"" + esc(x.code) + "\\\" " + checked + " /></td>"
         + "<td class=\\\"mono\\\">" + esc(x.code) + "</td>"
+        + "<td>" + fmtCardType(x.cardType) + "</td>"
         + "<td><span class=\\\"badge " + (x.status === "active" ? "active" : "disabled") + "\\\">" + statusText + "</span></td>"
         + "<td>" + x.usedCount + "/" + x.maxUses + "</td>"
         + "<td>" + (x.deviceCount || 0) + "/" + (x.deviceLimit || 1) + "</td>"
+        + "<td>" + fmtTs(x.activatedAt) + "</td>"
         + "<td>" + fmtTs(x.expiresAt) + "</td>"
         + "<td class=\\\"row\\\">"
         + "<button data-act=\\\"devices\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"secondary\\\">设备</button>"
@@ -433,7 +445,7 @@ document.getElementById("createBtn").addEventListener("click", async () => {
   try {
     const payload = {
       count: Number(document.getElementById("count").value || 1),
-      expiresInDays: Number(document.getElementById("days").value || 30),
+      cardType: document.getElementById("cardType").value || "month",
       maxUses: Number(document.getElementById("maxUses").value || 1),
       deviceLimit: Number(document.getElementById("deviceLimit").value || 1),
       prefix: document.getElementById("prefix").value || "SN",
