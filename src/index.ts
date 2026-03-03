@@ -39,6 +39,34 @@ type ActivationCodeRow = {
   device_limit: number;
   updated_at: number;
 };
+type DeviceRow = {
+  device_id: string;
+  device_name: string;
+  app_version: string;
+  client_ip: string;
+  user_agent: string;
+  first_seen_at: number;
+  last_seen_at: number;
+  is_active: number;
+};
+type DeviceActivationRow = {
+  id: number;
+  device_id: string;
+  activation_code: string;
+  activated_at: number;
+  expires_at: number;
+  is_active: number;
+  renewal_count: number;
+};
+type DeviceActivationStatus = {
+  deviceId: string;
+  currentActivationCode: string | null;
+  totalValidUntil: number; // 设备总有效到时间（秒级时间戳）
+  isActive: boolean;
+  activationCount: number;
+  renewalCount: number;
+  lastSeenAt: number;
+};
 
 const encoder = new TextEncoder();
 const FIVE_MINUTES = 300;
@@ -309,6 +337,43 @@ export default {
         return json(200, { code: 200, msg: "ok", data });
       }
 
+      if (method === "GET" && pathname === "/admin/devices") {
+        const admin = await requireAdmin(request, env);
+        if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
+        const data = await listDevicesPage(env.DB, {
+          page: Number(url.searchParams.get("page") || "1"),
+          pageSize: Number(url.searchParams.get("pageSize") || "10"),
+          keyword: String(url.searchParams.get("keyword") || ""),
+        });
+        return json(200, { code: 200, msg: "ok", data: data.data, pagination: data.pagination });
+      }
+
+      const deviceActivationMatch = pathname.match(/^\/admin\/devices\/([^/]+)\/activations$/);
+      if (method === "GET" && deviceActivationMatch) {
+        const admin = await requireAdmin(request, env);
+        if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
+        const deviceId = normalizeCode(decodeURIComponent(deviceActivationMatch[1]));
+        const data = await getDeviceActivations(env.DB, deviceId);
+        return json(200, { code: 200, msg: "ok", data });
+      }
+
+      if (method === "POST" && pathname === "/admin/devices/renew") {
+        const admin = await requireAdmin(request, env);
+        if (!admin) return json(401, { code: 401, msg: "admin not logged in" });
+        const { body } = await parseRequestBody(request);
+        const deviceId = normalizeCode(String(body.deviceId || ""));
+        const activationCode = normalizeCode(String(body.activationCode || ""));
+        if (!deviceId || !activationCode) {
+          return json(400, { code: 400, msg: "deviceId and activationCode are required" });
+        }
+        const result = await renewDeviceActivation(env.DB, deviceId, activationCode, {
+          addDays: Number(body.addDays || 0),
+          addUses: Number(body.addUses || 0),
+        });
+        if (!result.ok) return json(400, { code: 400, msg: result.msg });
+        return json(200, { code: 200, msg: "ok", data: result.data });
+      }
+
       return json(404, { code: 404, msg: "not found" });
     } catch (err) {
       return json(500, { code: 500, msg: `internal error: ${err instanceof Error ? err.message : String(err)}` });
@@ -316,6 +381,7 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
+// ======================== 工具函数 ========================
 function nowSec() { return Math.floor(Date.now() / 1000); }
 function normalizeCardType(input: unknown): string {
   const raw = String(input || "").trim().toLowerCase();
@@ -596,9 +662,6 @@ function extractCodesFromBody(body: Json) {
 }
 
 function isActivationCodeLike(code: string) {
-  // Backward compatibility:
-  // - legacy style: XXXX-XXXX
-  // - current style: XXXX-XXXX-XXXX-XXXX
   return /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){1,3}$/.test(code);
 }
 
@@ -713,7 +776,7 @@ async function listCodesPage(db: D1Database, p: { page: number; pageSize: number
   const data = (rows.results || []).map(formatCodeRow);
 
   for (const item of data) {
-    (item as Record<string, unknown>).deviceCount = Number((await db.prepare("SELECT COUNT(1) as c FROM activation_code_devices WHERE code = ?").bind(item.code).first<{ c: number }>())?.c || 0);
+    (item as Record<string, unknown>).deviceCount = Number((await db.prepare("SELECT COUNT(1) as c FROM device_activations WHERE activation_code = ? AND is_active = 1").bind(item.code).first<{ c: number }>())?.c || 0);
   }
 
   return { data, pagination: { page: currentPage, pageSize, total, totalPages } };
@@ -795,7 +858,19 @@ async function getCodeUsages(db: D1Database, code: string) {
   const found = await db.prepare("SELECT code FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first();
   if (!found) return { ok: false, msg: "activation code not found" };
 
-  const rows = await db.prepare("SELECT device_id, device_name, app_version, client_ip, user_agent, first_seen_at, last_seen_at, use_count FROM activation_code_devices WHERE code = ? ORDER BY last_seen_at DESC").bind(code).all<{ device_id: string; device_name: string; app_version: string; client_ip: string; user_agent: string; first_seen_at: number; last_seen_at: number; use_count: number }>();
+  const rows = await db.prepare(`
+    SELECT d.device_id, d.device_name, d.app_version, d.client_ip, d.user_agent, d.first_seen_at, d.last_seen_at, 
+           da.use_count, da.activated_at, da.expires_at, da.is_active, da.renewal_count
+    FROM device_activations da
+    INNER JOIN devices d ON d.device_id = da.device_id
+    WHERE da.activation_code = ?
+    ORDER BY da.activated_at DESC
+  `).bind(code).all<{
+    device_id: string; device_name: string; app_version: string; client_ip: string; user_agent: string;
+    first_seen_at: number; last_seen_at: number; use_count: number; activated_at: number;
+    expires_at: number; is_active: number; renewal_count: number;
+  }>();
+
   return {
     ok: true,
     data: (rows.results || []).map((x) => ({
@@ -807,39 +882,516 @@ async function getCodeUsages(db: D1Database, code: string) {
       firstSeenAt: Number(x.first_seen_at || 0),
       lastSeenAt: Number(x.last_seen_at || 0),
       useCount: Number(x.use_count || 0),
+      activatedAt: Number(x.activated_at || 0),
+      expiresAt: Number(x.expires_at || 0),
+      isActive: Boolean(x.is_active || 0),
+      renewalCount: Number(x.renewal_count || 0),
     })),
   };
 }
 
+// ======================== 设备为中心的核心里程碑函数 ========================
+
+/**
+ * 获取设备状态（核心函数，包含过期时间叠加逻辑）
+ * 返回设备总有效时间和激活状态
+ */
+async function getDeviceStatus(db: D1Database, deviceId: string): Promise<DeviceActivationStatus> {
+  const now = nowSec();
+  const deviceIdNorm = normalizeCode(deviceId || "UNKNOWN");
+
+  // 获取设备基本信息
+  const device = await db.prepare(
+    "SELECT device_id, device_name, app_version, client_ip, user_agent, first_seen_at, last_seen_at, is_active FROM devices WHERE device_id = ? LIMIT 1"
+  ).bind(deviceIdNorm).first<DeviceRow>();
+
+  if (!device) {
+    return {
+      deviceId: deviceIdNorm,
+      currentActivationCode: null,
+      totalValidUntil: 0,
+      isActive: false,
+      activationCount: 0,
+      renewalCount: 0,
+      lastSeenAt: 0
+    };
+  }
+
+  // 获取设备的所有激活记录（包括历史的和当前有效的）
+  const activations = await db.prepare(`
+    SELECT da.id, da.activation_code, da.activated_at, da.expires_at, da.is_active, da.renewal_count,
+           ac.status as code_status, ac.card_type, ac.duration_sec, ac.activated_at as code_activated_at
+    FROM device_activations da
+    INNER JOIN activation_codes ac ON da.activation_code = ac.code
+    WHERE da.device_id = ?
+    ORDER BY da.activated_at DESC
+  `).bind(deviceIdNorm).all<DeviceActivationRow & {
+    code_status: string;
+    card_type: string;
+    duration_sec: number;
+    code_activated_at: number | null;
+  }>();
+
+  const activationList = activations.results || [];
+  let totalValidUntil = 0;
+  let currentActivationCode: string | null = null;
+  let renewalCount = 0;
+  let hasActiveActivation = false;
+  let maxExpiresAt = 0;
+
+  // 计算设备总有效时间（过期时间叠加逻辑）
+  for (const act of activationList) {
+    renewalCount += Number(act.renewal_count || 0);
+
+    // 检查激活码本身是否有效
+    if (act.code_status !== "active") continue;
+
+    const isPermanent = String(act.card_type || "") === "permanent";
+    const expiresAt = Number(act.expires_at || 0);
+    const isExpired = !isPermanent && expiresAt > 0 && expiresAt < now;
+
+    if (!isExpired && Boolean(act.is_active)) {
+      hasActiveActivation = true;
+
+      if (isPermanent) {
+        // 永久卡，设备永久有效
+        totalValidUntil = 0;
+        currentActivationCode = act.activation_code;
+        break;
+      } else if (expiresAt > 0) {
+        // 叠加过期时间：取最大的过期时间
+        if (expiresAt > maxExpiresAt) {
+          maxExpiresAt = expiresAt;
+          currentActivationCode = act.activation_code;
+        }
+      }
+    }
+  }
+
+  // 如果没有有效的激活记录，但有历史记录，则使用最后一次有效的过期时间
+  if (!hasActiveActivation && maxExpiresAt > 0) {
+    // 设备已过期
+    totalValidUntil = maxExpiresAt;
+  } else {
+    totalValidUntil = maxExpiresAt;
+  }
+
+  return {
+    deviceId: deviceIdNorm,
+    currentActivationCode,
+    totalValidUntil,
+    isActive: hasActiveActivation,
+    activationCount: activationList.length,
+    renewalCount,
+    lastSeenAt: Number(device.last_seen_at || 0)
+  };
+}
+
+/**
+ * 验证并消费激活码（重构为设备为中心）
+ * 核心逻辑：设备使用激活码，记录设备激活，计算叠加过期时间
+ */
+async function validateAndConsumeCode(
+  db: D1Database,
+  code: string,
+  usage: { deviceId: string; deviceName: string; appVersion: string; clientIp: string; userAgent: string }
+) {
+  const now = nowSec();
+  const currentDeviceId = normalizeCode(usage.deviceId || "UNKNOWN");
+
+  // 1. 验证激活码本身
+  const record = await db.prepare(
+    "SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1"
+  ).bind(code).first<ActivationCodeRow>();
+
+  if (!record) return { ok: false as const, msg: "invalid activation code" };
+
+  if (record.status !== "active") return { ok: false as const, msg: "activation code disabled" };
+  if (isCodeExpired(record, now)) {
+    await db.prepare("DELETE FROM activation_codes WHERE code = ?").bind(code).run();
+    return { ok: false as const, msg: "activation code expired" };
+  }
+  if (Number(record.used_count || 0) >= Number(record.max_uses || 0)) {
+    return { ok: false as const, msg: "activation code usage limit reached" };
+  }
+
+  // 2. 检查设备是否已绑定此激活码
+  const existingBinding = await db.prepare(
+    "SELECT id FROM device_activations WHERE device_id = ? AND activation_code = ? LIMIT 1"
+  ).bind(currentDeviceId, code).first<{ id: number }>();
+
+  if (existingBinding) {
+    return { ok: false as const, msg: "activation code already used on this device" };
+  }
+
+  // 3. 检查激活码的设备限制
+  const deviceCount = Number((await db.prepare(
+    "SELECT COUNT(1) as c FROM device_activations WHERE activation_code = ? AND is_active = 1"
+  ).bind(code).first<{ c: number }>())?.c || 0);
+
+  const deviceLimit = Math.max(1, Number(record.device_limit || 1));
+  if (deviceCount >= deviceLimit) {
+    return { ok: false as const, msg: "activation code bound to another device" };
+  }
+
+  // 4. 更新激活码使用计数
+  const activatedAt = Number(record.activated_at || 0) || null;
+  const baseDuration = Math.max(0, Number(record.duration_sec || CARD_TYPE_SECONDS.month));
+  const computedExpireAt = computeExpireAt(String(record.card_type || "month"), activatedAt || now, baseDuration);
+
+  const updated = await db.prepare(
+    "UPDATE activation_codes SET used_count = used_count + 1, last_used_at = ?, updated_at = ?, activated_at = COALESCE(activated_at, ?), expires_at = CASE WHEN card_type = 'permanent' THEN 0 WHEN activated_at IS NULL THEN ? ELSE expires_at END WHERE code = ? AND status = 'active' AND used_count < max_uses"
+  ).bind(now, now, now, computedExpireAt, code).run();
+
+  if (Number(updated.meta?.changes || 0) <= 0) {
+    return { ok: false as const, msg: "activation code usage limit reached" };
+  }
+
+  // 5. 创建或更新设备记录
+  await db.prepare(
+    "INSERT OR REPLACE INTO devices (device_id, device_name, app_version, client_ip, user_agent, first_seen_at, last_seen_at, is_active) VALUES (?, ?, ?, ?, ?, COALESCE((SELECT first_seen_at FROM devices WHERE device_id = ?), ?), ?, 1)"
+  ).bind(
+    currentDeviceId,
+    String(usage.deviceName || ""),
+    String(usage.appVersion || ""),
+    String(usage.clientIp || ""),
+    String(usage.userAgent || ""),
+    currentDeviceId,
+    now,
+    now
+  ).run();
+
+  // 6. 创建设备激活记录
+  await db.prepare(
+    "INSERT INTO device_activations (device_id, activation_code, activated_at, expires_at, is_active, renewal_count) VALUES (?, ?, ?, ?, 1, 0)"
+  ).bind(currentDeviceId, code, now, computedExpireAt).run();
+
+  // 7. 重新计算设备总有效时间
+  const deviceStatus = await getDeviceStatus(db, currentDeviceId);
+
+  // 8. 获取更新后的激活码记录
+  const fresh = await db.prepare(
+    "SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1"
+  ).bind(code).first<ActivationCodeRow>();
+
+  if (!fresh) return { ok: false as const, msg: "activation code update failed" };
+
+  return {
+    ok: true as const,
+    record: fresh,
+    deviceCount: deviceCount + 1,
+    deviceStatus
+  };
+}
+
+/**
+ * 检查激活码是否可用于方案获取
+ */
+async function checkCodeAvailableForScheme(db: D1Database, code: string, deviceId: string) {
+  const deviceIdNorm = normalizeCode(deviceId);
+  const codeNorm = normalizeCode(code);
+  const now = nowSec();
+
+  const binding = await db.prepare(
+    "SELECT 1 FROM device_activations WHERE device_id = ? AND activation_code = ? LIMIT 1"
+  ).bind(deviceIdNorm, codeNorm).first<{ "1": number }>();
+
+  if (!binding) {
+    return {
+      ok: false as const,
+      msg: "activation code not bound to this device or invalid token"
+    };
+  }
+
+  const deviceStatus = await getDeviceStatus(db, deviceIdNorm);
+
+  if (!deviceStatus.isActive) {
+    const permanentExists = await db.prepare(`
+      SELECT 1 
+      FROM device_activations da
+      INNER JOIN activation_codes ac ON da.activation_code = ac.code
+      WHERE da.device_id = ? 
+        AND da.is_active = 1
+        AND ac.status = 'active'
+        AND ac.card_type = 'permanent'
+      LIMIT 1
+    `).bind(deviceIdNorm).first<{ "1": number }>();
+
+    if (permanentExists) {
+      return { ok: true as const };
+    }
+
+    if (deviceStatus.totalValidUntil > 0 && deviceStatus.totalValidUntil < now) {
+      return {
+        ok: false as const,
+        msg: `device activation expired at ${new Date(deviceStatus.totalValidUntil * 1000).toLocaleString()}`
+      };
+    }
+
+    return {
+      ok: false as const,
+      msg: "device is not active"
+    };
+  }
+
+  return { ok: true as const };
+}
+
+/**
+ * 设备续期（为设备续期特定的激活码）
+ */
+async function renewDeviceActivation(
+  db: D1Database,
+  deviceId: string,
+  activationCode: string,
+  p: { addDays: number; addUses: number }
+) {
+  const now = nowSec();
+  const deviceIdNorm = normalizeCode(deviceId);
+  const codeNorm = normalizeCode(activationCode);
+
+  // 1. 检查激活记录是否存在
+  const activation = await db.prepare(
+    "SELECT da.id, da.expires_at, da.renewal_count, ac.card_type FROM device_activations da " +
+    "INNER JOIN activation_codes ac ON da.activation_code = ac.code " +
+    "WHERE da.device_id = ? AND da.activation_code = ? AND da.is_active = 1 LIMIT 1"
+  ).bind(deviceIdNorm, codeNorm).first<{
+    id: number;
+    expires_at: number;
+    renewal_count: number;
+    card_type: string;
+  }>();
+
+  if (!activation) {
+    return { ok: false as const, msg: "device activation not found" };
+  }
+
+  const isPermanent = String(activation.card_type || "") === "permanent";
+  if (isPermanent) {
+    return { ok: false as const, msg: "permanent activation cannot be renewed" };
+  }
+
+  const days = Math.max(0, Number(p.addDays || 0));
+  const uses = Math.max(0, Number(p.addUses || 0));
+
+  if (days <= 0 && uses <= 0) {
+    return { ok: false as const, msg: "nothing to renew" };
+  }
+
+  // 2. 更新激活码的使用次数
+  if (uses > 0) {
+    await db.prepare(
+      "UPDATE activation_codes SET max_uses = max_uses + ?, updated_at = ? WHERE code = ?"
+    ).bind(uses, now, codeNorm).run();
+  }
+
+  // 3. 更新设备激活记录的过期时间
+  const extraSec = days * 86400;
+  const newExpiresAt = Math.max(now, Number(activation.expires_at || now)) + extraSec;
+  const newRenewalCount = Number(activation.renewal_count || 0) + 1;
+
+  await db.prepare(
+    "UPDATE device_activations SET expires_at = ?, renewal_count = ?, updated_at = ? WHERE id = ?"
+  ).bind(newExpiresAt, newRenewalCount, now, activation.id).run();
+
+  // 4. 重新计算设备总状态
+  const deviceStatus = await getDeviceStatus(db, deviceIdNorm);
+
+  return {
+    ok: true as const,
+    data: {
+      deviceId: deviceIdNorm,
+      activationCode: codeNorm,
+      newExpiresAt,
+      renewalCount: newRenewalCount,
+      deviceStatus
+    }
+  };
+}
+
+/**
+ * 列出设备激活记录
+ */
+async function getDeviceActivations(db: D1Database, deviceId: string) {
+  const deviceIdNorm = normalizeCode(deviceId);
+
+  const rows = await db.prepare(`
+    SELECT 
+      da.activation_code,
+      da.activated_at,
+      da.expires_at,
+      da.is_active,
+      da.renewal_count,
+      ac.status as code_status,
+      ac.card_type,
+      ac.duration_sec,
+      ac.max_uses,
+      ac.used_count,
+      ac.issued_to,
+      ac.note
+    FROM device_activations da
+    INNER JOIN activation_codes ac ON da.activation_code = ac.code
+    WHERE da.device_id = ?
+    ORDER BY da.activated_at DESC
+  `).bind(deviceIdNorm).all<{
+    activation_code: string;
+    activated_at: number;
+    expires_at: number;
+    is_active: number;
+    renewal_count: number;
+    code_status: string;
+    card_type: string;
+    duration_sec: number;
+    max_uses: number;
+    used_count: number;
+    issued_to: string;
+    note: string;
+  }>();
+
+  const result = (rows.results || []).map((row) => ({
+    activationCode: row.activation_code,
+    activatedAt: Number(row.activated_at || 0),
+    expiresAt: Number(row.expires_at || 0),
+    isActive: Boolean(row.is_active || 0),
+    renewalCount: Number(row.renewal_count || 0),
+    codeStatus: row.code_status,
+    cardType: row.card_type,
+    durationSec: Number(row.duration_sec || 0),
+    maxUses: Number(row.max_uses || 0),
+    usedCount: Number(row.used_count || 0),
+    issuedTo: row.issued_to,
+    note: row.note
+  }));
+
+  return result;
+}
+
+/**
+ * 分页列出设备
+ */
+async function listDevicesPage(
+  db: D1Database,
+  p: { page: number; pageSize: number; keyword: string }
+) {
+  const page = Math.max(1, Number(p.page || 1));
+  const pageSize = Math.max(1, Math.min(100, Number(p.pageSize || 10)));
+  const keyword = String(p.keyword || "").trim().toUpperCase();
+
+  const whereSql: string[] = [];
+  const binds: (string | number)[] = [];
+
+  if (keyword) {
+    whereSql.push(`(
+      UPPER(device_id) LIKE ? OR
+      UPPER(device_name) LIKE ? OR
+      UPPER(app_version) LIKE ? OR
+      UPPER(client_ip) LIKE ? OR
+      EXISTS (
+        SELECT 1
+        FROM device_activations da
+        INNER JOIN activation_codes ac ON da.activation_code = ac.code
+        WHERE da.device_id = devices.device_id
+          AND (UPPER(da.activation_code) LIKE ? OR UPPER(ac.issued_to) LIKE ?)
+      )
+    )`);
+    binds.push(
+      `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`,
+      `%${keyword}%`, `%${keyword}%`
+    );
+  }
+
+  const where = whereSql.length ? `WHERE ${whereSql.join(" AND ")}` : "";
+
+  // 获取总数
+  const total = Number((await db.prepare(
+    `SELECT COUNT(1) as total FROM devices ${where}`
+  ).bind(...binds).first<{ total: number }>())?.total || 0);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const offset = (currentPage - 1) * pageSize;
+
+  // 获取设备列表
+  const rows = await db.prepare(
+    `SELECT device_id, device_name, app_version, client_ip, user_agent, first_seen_at, last_seen_at, is_active 
+     FROM devices ${where} 
+     ORDER BY last_seen_at DESC 
+     LIMIT ? OFFSET ?`
+  ).bind(...binds, pageSize, offset).all<DeviceRow>();
+
+  const devices = (rows.results || []).map(async (row) => {
+    const deviceStatus = await getDeviceStatus(db, row.device_id);
+
+    // 获取激活码数量
+    const activationCount = Number((await db.prepare(
+      "SELECT COUNT(1) as c FROM device_activations WHERE device_id = ?"
+    ).bind(row.device_id).first<{ c: number }>())?.c || 0);
+
+    return {
+      deviceId: row.device_id,
+      deviceName: row.device_name,
+      appVersion: row.app_version,
+      clientIp: row.client_ip,
+      userAgent: row.user_agent,
+      firstSeenAt: Number(row.first_seen_at || 0),
+      lastSeenAt: Number(row.last_seen_at || 0),
+      isActive: Boolean(row.is_active || 0),
+      activationCount,
+      totalValidUntil: deviceStatus.totalValidUntil,
+      currentActivationCode: deviceStatus.currentActivationCode,
+      deviceStatus: deviceStatus.isActive ? "active" : "expired"
+    };
+  });
+
+  const data = await Promise.all(devices);
+
+  return {
+    data,
+    pagination: {
+      page: currentPage,
+      pageSize,
+      total,
+      totalPages
+    }
+  };
+}
+
+/**
+ * 列出设备树（保留原有接口兼容性）
+ */
 async function listDeviceTree(db: D1Database, keywordRaw: string) {
   const keyword = String(keywordRaw || "").trim().toUpperCase();
-  const where = keyword ? "WHERE (UPPER(d.device_id) LIKE ? OR UPPER(d.device_name) LIKE ? OR UPPER(d.code) LIKE ?)" : "";
+  const where = keyword ?
+    "WHERE (UPPER(d.device_id) LIKE ? OR UPPER(d.device_name) LIKE ? OR UPPER(da.activation_code) LIKE ?)" :
+    "";
   const binds: string[] = keyword ? [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`] : [];
+
   const rows = await db.prepare(
     `SELECT
       d.device_id,
       d.device_name,
-      d.code,
-      d.use_count,
-      d.last_seen_at,
-      c.status,
-      c.expires_at,
-      c.max_uses,
-      c.used_count
-    FROM activation_code_devices d
-    INNER JOIN activation_codes c ON c.code = d.code
+      da.activation_code as code,
+      da.expires_at,
+      da.is_active as activation_active,
+      ac.status as code_status,
+      ac.max_uses,
+      ac.used_count,
+      ac.card_type
+    FROM devices d
+    INNER JOIN device_activations da ON d.device_id = da.device_id
+    INNER JOIN activation_codes ac ON da.activation_code = ac.code
     ${where}
-    ORDER BY d.device_id ASC, d.last_seen_at DESC`,
+    ORDER BY d.device_id ASC, da.activated_at DESC`
   ).bind(...binds).all<{
     device_id: string;
     device_name: string;
     code: string;
-    use_count: number;
-    last_seen_at: number;
-    status: string;
     expires_at: number;
+    activation_active: number;
+    code_status: string;
     max_uses: number;
     used_count: number;
+    card_type: string;
   }>();
 
   const deviceMap = new Map<string, {
@@ -848,85 +1400,56 @@ async function listDeviceTree(db: D1Database, keywordRaw: string) {
     totalUses: number;
     codeCount: number;
     lastSeenAt: number;
-    children: Array<{ code: string; status: string; expiresAt: number; maxUses: number; usedCount: number; useCount: number; lastSeenAt: number }>;
+    children: Array<{
+      code: string;
+      status: string;
+      expiresAt: number;
+      maxUses: number;
+      usedCount: number;
+      isActive: boolean;
+      cardType: string;
+    }>;
   }>();
+
   for (const row of rows.results || []) {
     const key = normalizeCode(row.device_id || "UNKNOWN");
     if (!deviceMap.has(key)) {
+      const device = await db.prepare(
+        "SELECT last_seen_at FROM devices WHERE device_id = ? LIMIT 1"
+      ).bind(key).first<{ last_seen_at: number }>();
+
       deviceMap.set(key, {
         deviceId: key,
         deviceName: String(row.device_name || ""),
         totalUses: 0,
         codeCount: 0,
-        lastSeenAt: 0,
+        lastSeenAt: device ? Number(device.last_seen_at || 0) : 0,
         children: [],
       });
     }
+
     const node = deviceMap.get(key)!;
-    node.totalUses += Number(row.use_count || 0);
     node.codeCount += 1;
-    node.lastSeenAt = Math.max(node.lastSeenAt, Number(row.last_seen_at || 0));
+
+    // 获取设备使用此激活码的次数
+    const useCount = Number((await db.prepare(
+      "SELECT use_count FROM device_activations WHERE device_id = ? AND activation_code = ? LIMIT 1"
+    ).bind(key, row.code).first<{ use_count: number }>())?.use_count || 0);
+
+    node.totalUses += useCount;
+
     node.children.push({
       code: String(row.code || ""),
-      status: String(row.status || ""),
+      status: String(row.code_status || ""),
       expiresAt: Number(row.expires_at || 0),
       maxUses: Number(row.max_uses || 0),
       usedCount: Number(row.used_count || 0),
-      useCount: Number(row.use_count || 0),
-      lastSeenAt: Number(row.last_seen_at || 0),
+      isActive: Boolean(row.activation_active || 0),
+      cardType: String(row.card_type || "month")
     });
   }
+
   return [...deviceMap.values()];
-}
-
-async function validateAndConsumeCode(db: D1Database, code: string, usage: { deviceId: string; deviceName: string; appVersion: string; clientIp: string; userAgent: string }) {
-  const record = await db.prepare("SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
-  if (!record) return { ok: false as const, msg: "invalid activation code" };
-
-  const now = nowSec();
-  if (record.status !== "active") return { ok: false as const, msg: "activation code disabled" };
-  if (isCodeExpired(record, now)) {
-    await db.prepare("DELETE FROM activation_codes WHERE code = ?").bind(code).run();
-    return { ok: false as const, msg: "activation code expired" };
-  }
-  if (Number(record.used_count || 0) >= Number(record.max_uses || 0)) return { ok: false as const, msg: "activation code usage limit reached" };
-
-  const currentDeviceId = normalizeCode(usage.deviceId || "UNKNOWN");
-  const existingDevice = await db.prepare("SELECT device_id FROM activation_code_devices WHERE code = ? AND device_id = ? LIMIT 1").bind(code, currentDeviceId).first();
-  if (existingDevice) return { ok: false as const, msg: "activation code already used on this device" };
-
-  const deviceCount = Number((await db.prepare("SELECT COUNT(1) as c FROM activation_code_devices WHERE code = ?").bind(code).first<{ c: number }>())?.c || 0);
-  const deviceLimit = Math.max(1, Number(record.device_limit || 1));
-  if (deviceCount >= deviceLimit) return { ok: false as const, msg: "activation code bound to another device" };
-
-  const activatedAt = Number(record.activated_at || 0) || null;
-  const baseDuration = Math.max(0, Number(record.duration_sec || CARD_TYPE_SECONDS.month));
-  const computedExpireAt = computeExpireAt(String(record.card_type || "month"), activatedAt || now, baseDuration);
-  const updated = await db.prepare(
-    "UPDATE activation_codes SET used_count = used_count + 1, last_used_at = ?, updated_at = ?, activated_at = COALESCE(activated_at, ?), expires_at = CASE WHEN card_type = 'permanent' THEN 0 WHEN activated_at IS NULL THEN ? ELSE expires_at END WHERE code = ? AND status = 'active' AND used_count < max_uses AND (card_type = 'permanent' OR activated_at IS NULL OR expires_at >= ?)",
-  ).bind(now, now, now, computedExpireAt, code, now).run();
-  if (Number(updated.meta?.changes || 0) <= 0) return { ok: false as const, msg: "activation code usage limit reached" };
-
-  await db.prepare("INSERT INTO activation_code_devices (code, device_id, device_name, app_version, client_ip, user_agent, first_seen_at, last_seen_at, use_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)").bind(code, currentDeviceId, String(usage.deviceName || ""), String(usage.appVersion || ""), String(usage.clientIp || ""), String(usage.userAgent || ""), now, now).run();
-
-  const fresh = await db.prepare("SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<ActivationCodeRow>();
-  if (!fresh) return { ok: false as const, msg: "activation code update failed" };
-  return { ok: true as const, record: fresh, deviceCount: deviceCount + 1 };
-}
-
-async function checkCodeAvailableForScheme(db: D1Database, code: string, deviceId: string) {
-  const record = await db.prepare("SELECT code, status, expires_at, card_type, activated_at FROM activation_codes WHERE code = ? LIMIT 1").bind(code).first<{ code: string; status: string; expires_at: number; card_type: string; activated_at: number | null }>();
-  if (!record) return { ok: false as const, msg: "activation code not found" };
-  const now = nowSec();
-  if (record.status !== "active") return { ok: false as const, msg: "activation code disabled" };
-  if (isCodeExpired({ card_type: record.card_type, expires_at: record.expires_at, activated_at: record.activated_at }, now)) {
-    await db.prepare("DELETE FROM activation_codes WHERE code = ?").bind(code).run();
-    return { ok: false as const, msg: "activation code expired" };
-  }
-
-  const binding = await db.prepare("SELECT device_id FROM activation_code_devices WHERE code = ? AND device_id = ? LIMIT 1").bind(code, normalizeCode(deviceId)).first();
-  if (!binding) return { ok: false as const, msg: "activation code device binding invalid" };
-  return { ok: true as const };
 }
 
 function executeInternalStrategy(payload: StrategyPayload) {

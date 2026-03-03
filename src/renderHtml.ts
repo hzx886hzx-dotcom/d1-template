@@ -141,6 +141,30 @@ export function renderAdminPage() {
 
 <div class="card">
   <div class="row">
+    <h3>设备管理</h3>
+    <input id="deviceSearchKw" placeholder="搜索设备ID/名称/激活码" />
+    <button id="deviceSearchBtn" class="secondary">搜索设备</button>
+    <button id="devicePrevBtn" class="secondary">上一页</button>
+    <button id="deviceNextBtn" class="secondary">下一页</button>
+    <span id="devicePageInfo" class="muted"></span>
+  </div>
+  <table>
+    <thead><tr>
+      <th>设备ID</th>
+      <th>设备名称</th>
+      <th>激活状态</th>
+      <th>有效期至</th>
+      <th>激活码数</th>
+      <th>最后活跃</th>
+      <th>操作</th>
+    </tr></thead>
+    <tbody id="deviceTbodyMain"></tbody>
+  </table>
+  <div class="row"><span id="deviceListMsg" class="muted"></span></div>
+</div>
+
+<div class="card">
+  <div class="row">
     <h3>激活码列表</h3>
     <input id="kw" placeholder="关键字: code / issuedTo / note / device" />
     <select id="status"><option value="">全部</option><option value="active">启用</option><option value="disabled">禁用</option></select>
@@ -176,12 +200,37 @@ export function renderAdminPage() {
       <tbody id="deviceTbody"></tbody>
     </table>
   </div>
+</div>
+
+<div id="deviceActivationModal" class="modal">
+  <div class="modal-card">
+    <div class="row">
+      <h3>设备激活记录</h3>
+      <button id="closeDeviceActivationModal" class="secondary right">关闭</button>
+    </div>
+    <div id="deviceActivationInfo" class="muted" style="margin-bottom: 12px;"></div>
+    <table>
+      <thead><tr>
+        <th>激活码</th>
+        <th>卡类型</th>
+        <th>激活时间</th>
+        <th>过期时间</th>
+        <th>续期次数</th>
+        <th>状态</th>
+        <th>操作</th>
+      </tr></thead>
+      <tbody id="deviceActivationTbody"></tbody>
+    </table>
+  </div>
 </div>`,
     `
 let page = 1;
 const pageSize = 20;
 let pagination = { page:1, totalPages:1, total:0 };
 const selectedCodes = new Set();
+
+let devicePage = 1;
+let devicePagination = { page:1, totalPages:1, total:0 };
 
 const meEl = document.getElementById("me");
 const tbody = document.getElementById("tbody");
@@ -196,6 +245,13 @@ const selectedInfo = document.getElementById("selectedInfo");
 const checkAll = document.getElementById("checkAll");
 const deviceTree = document.getElementById("deviceTree");
 const deviceTreeMsg = document.getElementById("deviceTreeMsg");
+
+const deviceTbodyMain = document.getElementById("deviceTbodyMain");
+const deviceListMsg = document.getElementById("deviceListMsg");
+const devicePageInfo = document.getElementById("devicePageInfo");
+const deviceActivationModal = document.getElementById("deviceActivationModal");
+const deviceActivationTbody = document.getElementById("deviceActivationTbody");
+const deviceActivationInfo = document.getElementById("deviceActivationInfo");
 
 async function api(path, init) {
   const r = await fetch(path, init);
@@ -214,7 +270,9 @@ function fmtCardType(v){
   if (t === "permanent") return "永久卡";
   return t || "-";
 }
-function esc(v){ return String(v ?? "").replace(/[<>&"]/g, (m) => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;", "":"&quot;" }[m])); }
+function esc(v){ 
+  return String(v ?? "").replace(/[<>&"]/g, (m) => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;", '"':"&quot;" }[m] || m)); 
+}
 function getSelectedCodes(){ return Array.from(selectedCodes.values()); }
 function syncSelectedInfo(){ selectedInfo.textContent = "已选择: " + selectedCodes.size; }
 
@@ -241,18 +299,18 @@ async function loadList(){
       const checked = selectedCodes.has(x.code) ? "checked" : "";
       const statusText = x.status === "active" ? "启用" : "禁用";
       return "<tr>"
-        + "<td><input type=\\\"checkbox\\\" data-act=\\\"pick\\\" data-code=\\\"" + esc(x.code) + "\\\" " + checked + " /></td>"
-        + "<td class=\\\"mono\\\">" + esc(x.code) + "</td>"
+        + "<td><input type=\\"checkbox\\" data-act=\\"pick\\" data-code=\\"" + esc(x.code) + "\\" " + checked + " /></td>"
+        + "<td class=\\"mono\\">" + esc(x.code) + "</td>"
         + "<td>" + fmtCardType(x.cardType) + "</td>"
-        + "<td><span class=\\\"badge " + (x.status === "active" ? "active" : "disabled") + "\\\">" + statusText + "</span></td>"
+        + "<td><span class=\\"badge " + (x.status === "active" ? "active" : "disabled") + "\\">" + statusText + "</span></td>"
         + "<td>" + x.usedCount + "/" + x.maxUses + "</td>"
         + "<td>" + (x.deviceCount || 0) + "/" + (x.deviceLimit || 1) + "</td>"
         + "<td>" + fmtTs(x.activatedAt) + "</td>"
         + "<td>" + fmtTs(x.expiresAt) + "</td>"
-        + "<td class=\\\"row\\\">"
-        + "<button data-act=\\\"devices\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"secondary\\\">设备</button>"
-        + "<button data-act=\\\"disable\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"danger\\\">禁用</button>"
-        + "<button data-act=\\\"renew\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"secondary\\\">续期+7天</button>"
+        + "<td class=\\"row\\">"
+        + "<button data-act=\\"devices\\" data-code=\\"" + esc(x.code) + "\\" class=\\"secondary\\">设备</button>"
+        + "<button data-act=\\"disable\\" data-code=\\"" + esc(x.code) + "\\" class=\\"danger\\">禁用</button>"
+        + "<button data-act=\\"renew\\" data-code=\\"" + esc(x.code) + "\\" class=\\"secondary\\">续期+7天</button>"
         + "</td>"
         + "</tr>";
     }).join("");
@@ -273,7 +331,7 @@ async function loadDevices(code){
     const j = await api("/admin/activation-codes/" + encodeURIComponent(code) + "/usages");
     const rows = j.data || [];
     deviceTbody.innerHTML = rows.length ? rows.map((x) => "<tr>"
-      + "<td class=\\\"mono\\\">" + esc(x.deviceId) + "</td>"
+      + "<td class=\\"mono\\">" + esc(x.deviceId) + "</td>"
       + "<td>" + esc(x.deviceName) + "</td>"
       + "<td>" + esc(x.appVersion) + "</td>"
       + "<td>" + esc(x.clientIp) + "</td>"
@@ -297,27 +355,99 @@ async function loadDeviceTree(){
     const rows = j.data || [];
     deviceTree.innerHTML = rows.length ? rows.map((d) => {
       const children = (d.children || []).map((c) => "<tr>"
-        + "<td class=\\\"mono\\\">" + esc(c.code) + "</td>"
+        + "<td class=\\"mono\\">" + esc(c.code) + "</td>"
         + "<td>" + (c.status === "active" ? "启用" : "禁用") + "</td>"
         + "<td>" + fmtTs(c.expiresAt) + "</td>"
         + "<td>" + esc(c.usedCount) + "/" + esc(c.maxUses) + "</td>"
         + "<td>" + esc(c.useCount) + "</td>"
         + "<td>" + fmtTs(c.lastSeenAt) + "</td>"
         + "</tr>").join("");
-      return "<details><summary><span class=\\\"mono\\\">" + esc(d.deviceId) + "</span> "
+      return "<details><summary><span class=\\"mono\\">" + esc(d.deviceId) + "</span> "
         + esc(d.deviceName || "")
         + " | 激活码: " + esc(d.codeCount)
         + " | 使用: " + esc(d.totalUses)
         + " | 最后: " + fmtTs(d.lastSeenAt)
-        + "</summary><div style=\\\"margin-top:8px\\\"><table><thead><tr><th>激活码</th><th>状态</th><th>过期时间</th><th>使用次数</th><th>设备使用</th><th>最后出现</th></tr></thead><tbody>"
+        + "</summary><div style=\\"margin-top:8px\\"><table><thead><tr><th>激活码</th><th>状态</th><th>过期时间</th><th>使用次数</th><th>设备使用</th><th>最后出现</th></tr></thead><tbody>"
         + children
         + "</tbody></table></div></details>";
-    }).join("") : "<div class=\\\"muted\\\">未找到设备</div>";
+    }).join("") : "<div class=\\"muted\\">未找到设备</div>";
     deviceTreeMsg.className = "ok";
     deviceTreeMsg.textContent = "已加载: " + rows.length + " 条";
   } catch (e) {
     deviceTreeMsg.className = "err";
     deviceTreeMsg.textContent = String(e);
+  }
+}
+
+async function loadDevicesPage() {
+  deviceListMsg.className = "muted";
+  deviceListMsg.textContent = "加载中...";
+  const keyword = document.getElementById("deviceSearchKw").value.trim();
+  try {
+    const q = new URLSearchParams({ 
+      page: String(devicePage), 
+      pageSize: "10", 
+      keyword 
+    });
+    const j = await api("/admin/devices?" + q.toString());
+    devicePagination = j.pagination || devicePagination;
+    const rows = j.data || [];
+    
+    deviceTbodyMain.innerHTML = rows.map((d) => {
+      const status = d.deviceStatus === "active" ? 
+        '<span class="badge active">有效</span>' : 
+        '<span class="badge disabled">过期</span>';
+      const validUntil = d.totalValidUntil ? 
+        new Date(Number(d.totalValidUntil) * 1000).toLocaleString() : 
+        (d.deviceStatus === "active" ? "永久" : "已过期");
+      
+      return "<tr>"
+        + "<td class=\\"mono\\">" + esc(d.deviceId) + "</td>"
+        + "<td>" + esc(d.deviceName) + "</td>"
+        + "<td>" + status + "</td>"
+        + "<td>" + validUntil + "</td>"
+        + "<td>" + esc(d.activationCount) + "</td>"
+        + "<td>" + (d.lastSeenAt ? new Date(Number(d.lastSeenAt) * 1000).toLocaleString() : "-") + "</td>"
+        + "<td><button data-act=\\"viewDevice\\" data-device=\\"" + esc(d.deviceId) + "\\" class=\\"secondary\\">查看激活</button></td>"
+        + "</tr>";
+    }).join("");
+    
+    devicePageInfo.textContent = "第 " + devicePagination.page + "/" + devicePagination.totalPages + " 页";
+    deviceListMsg.textContent = "共 " + (devicePagination.total || 0) + " 台设备";
+  } catch (e) {
+    deviceListMsg.className = "err";
+    deviceListMsg.textContent = String(e);
+  }
+}
+
+async function loadDeviceActivations(deviceId) {
+  deviceActivationTbody.innerHTML = "<tr><td colspan='7'>加载中...</td></tr>";
+  deviceActivationModal.classList.add("open");
+  
+  try {
+    const j = await api("/admin/devices/" + encodeURIComponent(deviceId) + "/activations");
+    const rows = j.data || [];
+    
+    deviceActivationInfo.innerHTML = "设备: <span class=\\"mono\\">" + esc(deviceId) + "</span> | 激活记录: " + rows.length;
+    
+    deviceActivationTbody.innerHTML = rows.length ? rows.map((a) => {
+      const status = a.isActive ? 
+        '<span class="badge active">有效</span>' : 
+        '<span class="badge disabled">过期</span>';
+      const cardTypeText = fmtCardType(a.cardType);
+      
+      return "<tr>"
+        + "<td class=\\"mono\\">" + esc(a.activationCode) + "</td>"
+        + "<td>" + cardTypeText + "</td>"
+        + "<td>" + (a.activatedAt ? new Date(Number(a.activatedAt) * 1000).toLocaleString() : "-") + "</td>"
+        + "<td>" + (a.expiresAt ? new Date(Number(a.expiresAt) * 1000).toLocaleString() : (a.cardType === "permanent" ? "永久" : "-")) + "</td>"
+        + "<td>" + esc(a.renewalCount) + "</td>"
+        + "<td>" + status + "</td>"
+        + "<td><button data-act=\\"renewDevice\\" data-device=\\"" + esc(deviceId) + "\\" data-code=\\"" + esc(a.activationCode) + "\\" class=\\"secondary\\">续期</button></td>"
+        + "</tr>";
+    }).join("") : "<tr><td colspan='7'>暂无激活记录</td></tr>";
+  } catch (e) {
+    deviceActivationTbody.innerHTML = "<tr><td colspan='7'>" + esc(String(e)) + "</td></tr>";
   }
 }
 
@@ -343,6 +473,7 @@ tbody.addEventListener("click", async (e) => {
     }
     await loadList();
     await loadDeviceTree();
+    await loadDevicesPage();
   } catch (e2) {
     alert(String(e2));
   }
@@ -390,6 +521,7 @@ document.getElementById("batchDisableBtn").addEventListener("click", async () =>
     batchMsg.textContent = "已禁用 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
     await loadList();
     await loadDeviceTree();
+    await loadDevicesPage();
   } catch (e) {
     batchMsg.className = "err";
     batchMsg.textContent = String(e);
@@ -408,6 +540,7 @@ document.getElementById("batchRenewBtn").addEventListener("click", async () => {
     batchMsg.textContent = "已续期 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
     await loadList();
     await loadDeviceTree();
+    await loadDevicesPage();
   } catch (e) {
     batchMsg.className = "err";
     batchMsg.textContent = String(e);
@@ -427,6 +560,7 @@ document.getElementById("batchDeleteBtn").addEventListener("click", async () => 
     batchMsg.textContent = "已删除 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
     await loadList();
     await loadDeviceTree();
+    await loadDevicesPage();
   } catch (e) {
     batchMsg.className = "err";
     batchMsg.textContent = String(e);
@@ -463,6 +597,7 @@ document.getElementById("createBtn").addEventListener("click", async () => {
     createDetail.textContent = created.map((x) => x.code).join("\\n");
     await loadList();
     await loadDeviceTree();
+    await loadDevicesPage();
   } catch (e) {
     createMsg.className = "err";
     createMsg.textContent = String(e);
@@ -471,10 +606,85 @@ document.getElementById("createBtn").addEventListener("click", async () => {
 
 document.getElementById("closeDeviceModal").addEventListener("click", () => deviceModal.classList.remove("open"));
 deviceModal.addEventListener("click", (e) => { if (e.target === deviceModal) deviceModal.classList.remove("open"); });
-document.getElementById("logoutBtn").addEventListener("click", async () => { await fetch("/web/logout", { method:"POST" }); location.href = "/admin/login"; });
+
+document.getElementById("closeDeviceActivationModal").addEventListener("click", () => 
+  deviceActivationModal.classList.remove("open")
+);
+deviceActivationModal.addEventListener("click", (e) => { 
+  if (e.target === deviceActivationModal) 
+    deviceActivationModal.classList.remove("open"); 
+});
+
+deviceTbodyMain.addEventListener("click", async (e) => {
+  const t = e.target;
+  if (!t.dataset) return;
+  const deviceId = t.dataset.device;
+  const act = t.dataset.act;
+  if (!deviceId || !act) return;
+  
+  if (act === "viewDevice") {
+    await loadDeviceActivations(deviceId);
+  }
+});
+
+deviceActivationTbody.addEventListener("click", async (e) => {
+  const t = e.target;
+  if (!t.dataset) return;
+  const deviceId = t.dataset.device;
+  const code = t.dataset.code;
+  const act = t.dataset.act;
+  if (!deviceId || !code || !act) return;
+  
+  if (act === "renewDevice") {
+    const addDays = prompt("续期天数:", "30");
+    const addUses = prompt("增加使用次数 (0表示不增加):", "0");
+    if (addDays === null || addUses === null) return;
+    
+    try {
+      await api("/admin/devices/renew", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId,
+          activationCode: code,
+          addDays: Number(addDays || 0),
+          addUses: Number(addUses || 0)
+        })
+      });
+      alert("续期成功");
+      await loadDeviceActivations(deviceId);
+      await loadDevicesPage();
+    } catch (e2) {
+      alert("续期失败: " + String(e2));
+    }
+  }
+});
+
+document.getElementById("deviceSearchBtn").addEventListener("click", () => { 
+  devicePage = 1; 
+  loadDevicesPage(); 
+});
+document.getElementById("devicePrevBtn").addEventListener("click", () => { 
+  if (devicePage > 1) { 
+    devicePage -= 1; 
+    loadDevicesPage(); 
+  } 
+});
+document.getElementById("deviceNextBtn").addEventListener("click", () => { 
+  if (devicePage < (devicePagination.totalPages || 1)) { 
+    devicePage += 1; 
+    loadDevicesPage(); 
+  } 
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async () => { 
+  await fetch("/web/logout", { method:"POST" }); 
+  location.href = "/admin/login"; 
+});
 
 ensureLogin();
 loadList();
-loadDeviceTree();`,
+loadDeviceTree();
+loadDevicesPage();`,
   );
 }
