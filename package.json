@@ -19,6 +19,7 @@
 		"sm-crypto": "^0.3.13"
 	},
 	"devDependencies": {
+		"@types/sm-crypto": "^0.3.4",
 		"typescript": "5.9.3",
 		"wrangler": "4.56.0"
 	},
