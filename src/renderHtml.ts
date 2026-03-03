@@ -365,7 +365,7 @@ async function loadDevicesPage() {
         (d.deviceStatus === "active" ? "永久" : "已过期");
       
       return "<tr>"
-        + "<td><input type=\"checkbox\" data-act=\"pickDevice\" data-device=\"" + esc(d.deviceId) + "\" " + checked + " /></td>"
+        + '<td><input type="checkbox" data-act="pickDevice" data-device="' + esc(d.deviceId) + '" ' + checked + ' /></td>'
         + "<td class=\"mono\">" + esc(d.deviceId) + "</td>"
         + "<td>" + esc(d.deviceName) + "</td>"
         + "<td>" + status + "</td>"
