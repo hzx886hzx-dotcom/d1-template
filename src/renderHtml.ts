@@ -1,6 +1,6 @@
 ﻿function shell(title: string, body: string, script: string) {
   return `<!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -48,18 +48,18 @@
 
 export function renderLoginPage() {
   return shell(
-    "SN Admin Login",
+    "SN 管理员登录",
     `
 <div class="card" style="max-width:460px;margin:90px auto;">
-  <h2>SN Admin Login</h2>
-  <p class="muted">On success you will be redirected to <code>/admin</code>.</p>
-  <label>Username</label>
+  <h2>SN 管理员登录</h2>
+  <p class="muted">登录成功后将被重定向到 <code>/admin</code>。</p>
+  <label>用户名</label>
   <input id="username" placeholder="superadmin" style="width:100%" />
-  <label style="margin-top:8px">Password</label>
+  <label style="margin-top:8px">密码</label>
   <input id="password" type="password" placeholder="password" style="width:100%" />
-  <div class="row" style="margin-top:10px"><label><input id="slider" type="checkbox" checked /> Slider captcha passed</label></div>
+  <div class="row" style="margin-top:10px"><label><input id="slider" type="checkbox" checked /> 滑块验证已通过</label></div>
   <div class="row" style="margin-top:10px">
-    <button id="loginBtn">Login</button>
+    <button id="loginBtn">登录</button>
     <span id="msg" class="muted"></span>
   </div>
 </div>`,
@@ -67,7 +67,7 @@ export function renderLoginPage() {
 const msg = document.getElementById("msg");
 document.getElementById("loginBtn").addEventListener("click", async () => {
   msg.className = "muted";
-  msg.textContent = "Logging in...";
+  msg.textContent = "正在登录...";
   try {
     const r = await fetch("/web/login", {
       method: "POST",
@@ -81,7 +81,7 @@ document.getElementById("loginBtn").addEventListener("click", async () => {
     const j = await r.json().catch(() => ({}));
     if (j.code === 200) {
       msg.className = "ok";
-      msg.textContent = "Login success";
+      msg.textContent = "登录成功";
       location.href = "/admin";
       return;
     }
@@ -97,42 +97,42 @@ document.getElementById("loginBtn").addEventListener("click", async () => {
 
 export function renderAdminPage() {
   return shell(
-    "SN Admin",
+    "SN 管理后台",
     `
 <div class="card row">
-  <h2>SN Admin</h2>
+  <h2>SN 管理后台</h2>
   <span id="me" class="muted"></span>
-  <button id="logoutBtn" class="secondary right">Logout</button>
+  <button id="logoutBtn" class="secondary right">退出登录</button>
 </div>
 
 <div class="grid">
   <div class="card">
-    <h3>Create Activation Codes</h3>
-    <p class="muted">Format: <code>XXXX-XXXX-XXXX-XXXX</code>.</p>
+    <h3>创建激活码</h3>
+    <p class="muted">格式: <code>XXXX-XXXX-XXXX-XXXX</code>。</p>
     <div class="row">
-      <div><label>Count</label><input id="count" type="number" min="1" max="200" value="1" /></div>
-      <div><label>Valid Days</label><input id="days" type="number" min="1" value="30" /></div>
-      <div><label>Max Uses</label><input id="maxUses" type="number" min="1" value="1" /></div>
-      <div><label>Device Limit</label><input id="deviceLimit" type="number" min="1" value="1" /></div>
+      <div><label>数量</label><input id="count" type="number" min="1" max="200" value="1" /></div>
+      <div><label>有效期(天)</label><input id="days" type="number" min="1" value="30" /></div>
+      <div><label>最大使用次数</label><input id="maxUses" type="number" min="1" value="1" /></div>
+      <div><label>设备限制</label><input id="deviceLimit" type="number" min="1" value="1" /></div>
     </div>
     <div class="row">
-      <div><label>Prefix (optional)</label><input id="prefix" value="SN" /></div>
-      <div style="min-width:220px"><label>Issued To</label><input id="issuedTo" placeholder="team-a" /></div>
-      <div style="flex:1"><label>Note</label><input id="note" placeholder="description" style="width:100%" /></div>
+      <div><label>前缀(可选)</label><input id="prefix" value="SN" /></div>
+      <div style="min-width:220px"><label>发放给</label><input id="issuedTo" placeholder="team-a" /></div>
+      <div style="flex:1"><label>备注</label><input id="note" placeholder="description" style="width:100%" /></div>
     </div>
     <div class="row" style="margin-top:8px">
-      <button id="createBtn">Create</button>
+      <button id="createBtn">创建</button>
       <span id="createMsg" class="muted"></span>
     </div>
     <pre id="createDetail" class="muted mono" style="white-space:pre-wrap;margin-top:8px;"></pre>
   </div>
 
   <div class="card">
-    <h3>Device Tree</h3>
-    <p class="muted">Search devices by deviceId/deviceName/code, then view bound activation codes in tree mode.</p>
+    <h3>设备树</h3>
+    <p class="muted">通过 deviceId/deviceName/code 搜索设备，然后以树形结构查看绑定的激活码。</p>
     <div class="row">
-      <input id="deviceKw" placeholder="device keyword" style="min-width:240px" />
-      <button id="deviceQueryBtn" class="secondary">Query</button>
+      <input id="deviceKw" placeholder="设备关键字" style="min-width:240px" />
+      <button id="deviceQueryBtn" class="secondary">查询</button>
       <span id="deviceTreeMsg" class="muted"></span>
     </div>
     <div id="deviceTree" class="tree" style="margin-top:10px;"></div>
@@ -141,25 +141,25 @@ export function renderAdminPage() {
 
 <div class="card">
   <div class="row">
-    <h3>Activation Code List</h3>
-    <input id="kw" placeholder="keyword: code / issuedTo / note / device" />
-    <select id="status"><option value="">all</option><option value="active">active</option><option value="disabled">disabled</option></select>
-    <button id="queryBtn" class="secondary">Query</button>
-    <button id="prevBtn" class="secondary">Prev</button>
-    <button id="nextBtn" class="secondary">Next</button>
+    <h3>激活码列表</h3>
+    <input id="kw" placeholder="关键字: code / issuedTo / note / device" />
+    <select id="status"><option value="">全部</option><option value="active">启用</option><option value="disabled">禁用</option></select>
+    <button id="queryBtn" class="secondary">查询</button>
+    <button id="prevBtn" class="secondary">上一页</button>
+    <button id="nextBtn" class="secondary">下一页</button>
     <span id="pageInfo" class="muted"></span>
   </div>
   <div class="row" style="margin-bottom:8px;">
-    <span id="selectedInfo" class="muted">Selected: 0</span>
+    <span id="selectedInfo" class="muted">已选择: 0</span>
     <input id="batchDays" type="number" min="0" value="7" style="width:90px" />
     <input id="batchUses" type="number" min="0" value="0" style="width:90px" />
-    <button id="batchDisableBtn" class="danger">Batch Disable</button>
-    <button id="batchRenewBtn" class="secondary">Batch Renew</button>
-    <button id="batchDeleteBtn" class="danger">Batch Delete</button>
+    <button id="batchDisableBtn" class="danger">批量禁用</button>
+    <button id="batchRenewBtn" class="secondary">批量续期</button>
+    <button id="batchDeleteBtn" class="danger">批量删除</button>
     <span id="batchMsg" class="muted"></span>
   </div>
   <table>
-    <thead><tr><th><input id="checkAll" type="checkbox" /></th><th>Code</th><th>Status</th><th>Uses</th><th>Devices</th><th>Expires</th><th>Actions</th></tr></thead>
+    <thead><tr><th><input id="checkAll" type="checkbox" /></th><th>激活码</th><th>状态</th><th>使用次数</th><th>设备数</th><th>过期时间</th><th>操作</th></tr></thead>
     <tbody id="tbody"></tbody>
   </table>
   <div class="row"><span id="listMsg" class="muted"></span></div>
@@ -168,11 +168,11 @@ export function renderAdminPage() {
 <div id="deviceModal" class="modal">
   <div class="modal-card">
     <div class="row">
-      <h3>Device Usage Details</h3>
-      <button id="closeDeviceModal" class="secondary right">Close</button>
+      <h3>设备使用详情</h3>
+      <button id="closeDeviceModal" class="secondary right">关闭</button>
     </div>
     <table>
-      <thead><tr><th>deviceId</th><th>deviceName</th><th>appVersion</th><th>IP</th><th>First Seen</th><th>Last Seen</th><th>Uses</th></tr></thead>
+      <thead><tr><th>deviceId</th><th>设备名称</th><th>App版本</th><th>IP地址</th><th>首次出现</th><th>最后出现</th><th>使用次数</th></tr></thead>
       <tbody id="deviceTbody"></tbody>
     </table>
   </div>
@@ -206,12 +206,12 @@ async function api(path, init) {
 function fmtTs(v){ if(!v) return "-"; return new Date(Number(v)*1000).toLocaleString(); }
 function esc(v){ return String(v ?? "").replace(/[<>&"]/g, (m) => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;", "\"":"&quot;" }[m])); }
 function getSelectedCodes(){ return Array.from(selectedCodes.values()); }
-function syncSelectedInfo(){ selectedInfo.textContent = "Selected: " + selectedCodes.size; }
+function syncSelectedInfo(){ selectedInfo.textContent = "已选择: " + selectedCodes.size; }
 
 async function ensureLogin() {
   try {
     const j = await api("/web/me");
-    meEl.textContent = "Current user: " + (j.data?.username || "");
+    meEl.textContent = "当前用户: " + (j.data?.username || "");
   } catch {
     location.href = "/admin/login";
   }
@@ -219,7 +219,7 @@ async function ensureLogin() {
 
 async function loadList(){
   listMsg.className = "muted";
-  listMsg.textContent = "Loading...";
+  listMsg.textContent = "加载中...";
   const kw = document.getElementById("kw").value.trim();
   const status = document.getElementById("status").value;
   try {
@@ -229,22 +229,23 @@ async function loadList(){
     const rows = j.data || [];
     tbody.innerHTML = rows.map((x) => {
       const checked = selectedCodes.has(x.code) ? "checked" : "";
+      const statusText = x.status === "active" ? "启用" : "禁用";
       return "<tr>"
         + "<td><input type=\\\"checkbox\\\" data-act=\\\"pick\\\" data-code=\\\"" + esc(x.code) + "\\\" " + checked + " /></td>"
         + "<td class=\\\"mono\\\">" + esc(x.code) + "</td>"
-        + "<td><span class=\\\"badge " + (x.status === "active" ? "active" : "disabled") + "\\\">" + esc(x.status) + "</span></td>"
+        + "<td><span class=\\\"badge " + (x.status === "active" ? "active" : "disabled") + "\\\">" + statusText + "</span></td>"
         + "<td>" + x.usedCount + "/" + x.maxUses + "</td>"
         + "<td>" + (x.deviceCount || 0) + "/" + (x.deviceLimit || 1) + "</td>"
         + "<td>" + fmtTs(x.expiresAt) + "</td>"
         + "<td class=\\\"row\\\">"
-        + "<button data-act=\\\"devices\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"secondary\\\">Devices</button>"
-        + "<button data-act=\\\"disable\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"danger\\\">Disable</button>"
-        + "<button data-act=\\\"renew\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"secondary\\\">Renew+7d</button>"
+        + "<button data-act=\\\"devices\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"secondary\\\">设备</button>"
+        + "<button data-act=\\\"disable\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"danger\\\">禁用</button>"
+        + "<button data-act=\\\"renew\\\" data-code=\\\"" + esc(x.code) + "\\\" class=\\\"secondary\\\">续期+7天</button>"
         + "</td>"
         + "</tr>";
     }).join("");
-    pageInfo.textContent = "Page " + pagination.page + "/" + pagination.totalPages;
-    listMsg.textContent = "Total: " + (pagination.total || 0);
+    pageInfo.textContent = "第 " + pagination.page + "/" + pagination.totalPages + " 页";
+    listMsg.textContent = "共 " + (pagination.total || 0) + " 条";
     syncSelectedInfo();
     checkAll.checked = rows.length > 0 && rows.every((x) => selectedCodes.has(x.code));
   } catch (e) {
@@ -254,7 +255,7 @@ async function loadList(){
 }
 
 async function loadDevices(code){
-  deviceTbody.innerHTML = "<tr><td colspan='7'>Loading...</td></tr>";
+  deviceTbody.innerHTML = "<tr><td colspan='7'>加载中...</td></tr>";
   deviceModal.classList.add("open");
   try {
     const j = await api("/admin/activation-codes/" + encodeURIComponent(code) + "/usages");
@@ -267,7 +268,7 @@ async function loadDevices(code){
       + "<td>" + fmtTs(x.firstSeenAt) + "</td>"
       + "<td>" + fmtTs(x.lastSeenAt) + "</td>"
       + "<td>" + esc(x.useCount) + "</td>"
-      + "</tr>").join("") : "<tr><td colspan='7'>No device records</td></tr>";
+      + "</tr>").join("") : "<tr><td colspan='7'>暂无设备记录</td></tr>";
   } catch (e) {
     deviceTbody.innerHTML = "<tr><td colspan='7'>" + esc(String(e)) + "</td></tr>";
   }
@@ -275,7 +276,7 @@ async function loadDevices(code){
 
 async function loadDeviceTree(){
   deviceTreeMsg.className = "muted";
-  deviceTreeMsg.textContent = "Loading...";
+  deviceTreeMsg.textContent = "加载中...";
   deviceTree.innerHTML = "";
   try {
     const keyword = document.getElementById("deviceKw").value.trim();
@@ -285,7 +286,7 @@ async function loadDeviceTree(){
     deviceTree.innerHTML = rows.length ? rows.map((d) => {
       const children = (d.children || []).map((c) => "<tr>"
         + "<td class=\\\"mono\\\">" + esc(c.code) + "</td>"
-        + "<td>" + esc(c.status) + "</td>"
+        + "<td>" + (c.status === "active" ? "启用" : "禁用") + "</td>"
         + "<td>" + fmtTs(c.expiresAt) + "</td>"
         + "<td>" + esc(c.usedCount) + "/" + esc(c.maxUses) + "</td>"
         + "<td>" + esc(c.useCount) + "</td>"
@@ -293,15 +294,15 @@ async function loadDeviceTree(){
         + "</tr>").join("");
       return "<details><summary><span class=\\\"mono\\\">" + esc(d.deviceId) + "</span> "
         + esc(d.deviceName || "")
-        + " | codes: " + esc(d.codeCount)
-        + " | uses: " + esc(d.totalUses)
-        + " | last: " + fmtTs(d.lastSeenAt)
-        + "</summary><div style=\\\"margin-top:8px\\\"><table><thead><tr><th>Code</th><th>Status</th><th>Expires</th><th>Uses</th><th>Device Uses</th><th>Last Seen</th></tr></thead><tbody>"
+        + " | 激活码: " + esc(d.codeCount)
+        + " | 使用: " + esc(d.totalUses)
+        + " | 最后: " + fmtTs(d.lastSeenAt)
+        + "</summary><div style=\\\"margin-top:8px\\\"><table><thead><tr><th>激活码</th><th>状态</th><th>过期时间</th><th>使用次数</th><th>设备使用</th><th>最后出现</th></tr></thead><tbody>"
         + children
         + "</tbody></table></div></details>";
-    }).join("") : "<div class=\\\"muted\\\">No devices found</div>";
+    }).join("") : "<div class=\\\"muted\\\">未找到设备</div>";
     deviceTreeMsg.className = "ok";
-    deviceTreeMsg.textContent = "Loaded: " + rows.length;
+    deviceTreeMsg.textContent = "已加载: " + rows.length + " 条";
   } catch (e) {
     deviceTreeMsg.className = "err";
     deviceTreeMsg.textContent = String(e);
@@ -317,11 +318,11 @@ tbody.addEventListener("click", async (e) => {
   try {
     if (act === "devices") return loadDevices(code);
     if (act === "disable") {
-      if (!confirm("Disable " + code + " ?")) return;
+      if (!confirm("确定禁用 " + code + " 吗？")) return;
       await api("/admin/activation-codes/" + encodeURIComponent(code) + "/disable", { method:"POST" });
     }
     if (act === "renew") {
-      if (!confirm("Renew " + code + " by 7 days and reactivate?")) return;
+      if (!confirm("确定续期 " + code + " 7天并重新激活吗？")) return;
       await api("/admin/activation-codes/" + encodeURIComponent(code) + "/renew", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
@@ -358,7 +359,7 @@ checkAll.addEventListener("change", () => {
 
 async function runBatch(path, payload, confirmText){
   const codes = getSelectedCodes();
-  if (!codes.length) throw new Error("Please select activation codes first");
+  if (!codes.length) throw new Error("请先选择激活码");
   if (confirmText && !confirm(confirmText + " (" + codes.length + ")")) return null;
   return api(path, {
     method:"POST",
@@ -369,12 +370,12 @@ async function runBatch(path, payload, confirmText){
 
 document.getElementById("batchDisableBtn").addEventListener("click", async () => {
   batchMsg.className = "muted";
-  batchMsg.textContent = "Running...";
+  batchMsg.textContent = "处理中...";
   try {
-    const j = await runBatch("/admin/activation-codes/batch-disable", {}, "Batch disable selected codes?");
+    const j = await runBatch("/admin/activation-codes/batch-disable", {}, "确定批量禁用选中的激活码吗？");
     if (!j) return;
     batchMsg.className = "ok";
-    batchMsg.textContent = "Disabled " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
+    batchMsg.textContent = "已禁用 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
     await loadList();
     await loadDeviceTree();
   } catch (e) {
@@ -385,14 +386,14 @@ document.getElementById("batchDisableBtn").addEventListener("click", async () =>
 
 document.getElementById("batchRenewBtn").addEventListener("click", async () => {
   batchMsg.className = "muted";
-  batchMsg.textContent = "Running...";
+  batchMsg.textContent = "处理中...";
   try {
     const addDays = Number(document.getElementById("batchDays").value || 0);
     const addUses = Number(document.getElementById("batchUses").value || 0);
-    const j = await runBatch("/admin/activation-codes/batch-renew", { addDays, addUses, reactivate:true }, "Batch renew selected codes?");
+    const j = await runBatch("/admin/activation-codes/batch-renew", { addDays, addUses, reactivate:true }, "确定批量续期选中的激活码吗？");
     if (!j) return;
     batchMsg.className = "ok";
-    batchMsg.textContent = "Renewed " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
+    batchMsg.textContent = "已续期 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
     await loadList();
     await loadDeviceTree();
   } catch (e) {
@@ -403,15 +404,15 @@ document.getElementById("batchRenewBtn").addEventListener("click", async () => {
 
 document.getElementById("batchDeleteBtn").addEventListener("click", async () => {
   batchMsg.className = "muted";
-  batchMsg.textContent = "Running...";
+  batchMsg.textContent = "处理中...";
   try {
-    const j = await runBatch("/admin/activation-codes/batch-delete", {}, "Batch delete selected codes? This cannot be undone.");
+    const j = await runBatch("/admin/activation-codes/batch-delete", {}, "确定批量删除选中的激活码吗？此操作不可撤销。");
     if (!j) return;
     const codes = getSelectedCodes();
     codes.forEach((x) => selectedCodes.delete(x));
     syncSelectedInfo();
     batchMsg.className = "ok";
-    batchMsg.textContent = "Deleted " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
+    batchMsg.textContent = "已删除 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
     await loadList();
     await loadDeviceTree();
   } catch (e) {
@@ -428,7 +429,7 @@ document.getElementById("deviceQueryBtn").addEventListener("click", loadDeviceTr
 document.getElementById("createBtn").addEventListener("click", async () => {
   createMsg.className = "muted";
   createDetail.textContent = "";
-  createMsg.textContent = "Submitting...";
+  createMsg.textContent = "提交中...";
   try {
     const payload = {
       count: Number(document.getElementById("count").value || 1),
@@ -444,6 +445,17 @@ document.getElementById("createBtn").addEventListener("click", async () => {
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify(payload),
     });
+    const created = j.data || [];
+    createMsg.className = "ok";
+    createMsg.textContent = "已创建: " + created.length;
+    createDetail.textContent = created.map((x) => x.code).join("\n");
+    await loadList();
+    await loadDeviceTree();
+  } catch (e) {
+    createMsg.className = "err";
+    createMsg.textContent = String(e);
+  }
+});
     const created = j.data || [];
     createMsg.className = "ok";
     createMsg.textContent = "Created: " + created.length;
