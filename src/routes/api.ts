@@ -77,12 +77,14 @@ export async function handleVerify(
       status: validated.record!.status,
       cardType: String(validated.record!.card_type || "month"),
       activatedAt: validated.record!.activated_at ? Number(validated.record!.activated_at) : null,
-      expiresAt: Number(validated.record!.expires_at || 0),
+      expiresAt: validated.newExpiresAt || Number(validated.record!.expires_at || 0),
       maxUses: Number(validated.record!.max_uses || 0),
       usedCount: Number(validated.record!.used_count || 0),
       deviceCount: validated.deviceCount,
       deviceLimit: Number(validated.record!.device_limit || 1),
       tokenExpiresAt: nowSec() + cfg.tokenTtlSec,
+      renewed: validated.renewed || false,
+      previousExpiresAt: validated.previousExpiresAt,
     },
   });
 }

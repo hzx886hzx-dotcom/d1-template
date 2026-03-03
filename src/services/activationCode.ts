@@ -329,12 +329,106 @@ export async function validateAndConsumeCode(
     return { ok: false, msg: "activation code usage limit reached" };
   }
 
+  const existingActivationsResult = await db.prepare(`
+    SELECT da.id, da.activation_code, da.expires_at, da.is_active, da.renewal_count,
+           ac.status as code_status, ac.card_type, ac.duration_sec, ac.activated_at as code_activated_at
+    FROM device_activations da
+    INNER JOIN activation_codes ac ON da.activation_code = ac.code
+    WHERE da.device_id = ?
+    ORDER BY da.activated_at DESC
+  `).bind(currentDeviceId).all<{
+    id: number;
+    activation_code: string;
+    expires_at: number;
+    is_active: number;
+    renewal_count: number;
+    code_status: string;
+    card_type: string;
+    duration_sec: number;
+    code_activated_at: number | null;
+  }>();
+
+  const existingActivations = existingActivationsResult.results || [];
+
   const existingBinding = await db.prepare(
     "SELECT id FROM device_activations WHERE device_id = ? AND activation_code = ? LIMIT 1"
   ).bind(currentDeviceId, code).first<{ id: number }>();
 
   if (existingBinding) {
     return { ok: false, msg: "activation code already used on this device" };
+  }
+
+  const isNewCodePermanent = String(record.card_type || "") === "permanent";
+  let hasPermanentActivation = false;
+  let hasActiveActivation = false;
+  let maxExpiresAt = 0;
+  let activeActivationId: number | null = null;
+  let activeActivationCode: string | null = null;
+
+  for (const act of existingActivations) {
+    if (act.code_status !== "active" || !act.is_active) continue;
+
+    const isPermanent = String(act.card_type || "") === "permanent";
+    const expiresAt = Number(act.expires_at || 0);
+    const isExpired = !isPermanent && expiresAt > 0 && expiresAt < now;
+
+    if (!isExpired) {
+      hasActiveActivation = true;
+      if (isPermanent) {
+        hasPermanentActivation = true;
+      } else if (expiresAt > maxExpiresAt) {
+        maxExpiresAt = expiresAt;
+        activeActivationId = act.id;
+        activeActivationCode = act.activation_code;
+      }
+    }
+  }
+
+  if (hasPermanentActivation) {
+    return { ok: false, msg: "device already has permanent activation" };
+  }
+
+  if (hasActiveActivation && !isNewCodePermanent) {
+    const newCodeDuration = Math.max(0, Number(record.duration_sec || CARD_TYPE_SECONDS.month));
+    const newCodeExpireAt = computeExpireAt(String(record.card_type || "month"), now, newCodeDuration);
+
+    if (activeActivationId && activeActivationCode) {
+      const extraSec = newCodeDuration;
+      const currentExpires = maxExpiresAt > 0 ? maxExpiresAt : now;
+      const renewedExpiresAt = currentExpires + extraSec;
+      const newRenewalCount = Number(
+        (await db.prepare("SELECT renewal_count FROM device_activations WHERE id = ?")
+          .bind(activeActivationId).first<{ renewal_count: number }>())?.renewal_count || 0
+      ) + 1;
+
+      await db.batch([
+        db.prepare(
+          "UPDATE device_activations SET expires_at = ?, renewal_count = ?, use_count = use_count + 1, updated_at = ? WHERE id = ?"
+        ).bind(renewedExpiresAt, newRenewalCount, now, activeActivationId),
+        db.prepare(
+          "UPDATE activation_codes SET used_count = used_count + 1, last_used_at = ?, updated_at = ?, activated_at = COALESCE(activated_at, ?) WHERE code = ? AND status = 'active' AND used_count < max_uses"
+        ).bind(now, now, now, code),
+      ]);
+
+      const updatedCode = await db.prepare(
+        "SELECT code, status, created_at, expires_at, card_type, duration_sec, activated_at, max_uses, used_count, last_used_at, issued_to, note, device_limit, updated_at FROM activation_codes WHERE code = ? LIMIT 1"
+      ).bind(code).first<ActivationCodeRow>();
+
+      const deviceCount = Number(
+        (await db.prepare(
+          "SELECT COUNT(1) as c FROM device_activations WHERE activation_code = ? AND is_active = 1"
+        ).bind(code).first<{ c: number }>())?.c || 0
+      );
+
+      return {
+        ok: true,
+        record: updatedCode || undefined,
+        deviceCount: deviceCount + 1,
+        renewed: true,
+        previousExpiresAt: maxExpiresAt,
+        newExpiresAt: renewedExpiresAt,
+      };
+    }
   }
 
   const deviceCount = Number(

@@ -233,6 +233,9 @@ export type ActivationValidationResult = {
   record?: ActivationCodeRow;
   deviceCount?: number;
   deviceStatus?: DeviceActivationStatus;
+  renewed?: boolean;
+  previousExpiresAt?: number;
+  newExpiresAt?: number;
 };
 
 export type RenewResult = {
