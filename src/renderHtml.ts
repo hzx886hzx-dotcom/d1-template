@@ -1,714 +1,429 @@
-﻿function shell(title: string, body: string, script: string) {
+import {
+  renderLoginPage as renderLoginPageComponent,
+  renderCreateCodeCard,
+  renderActivationCodeList,
+  renderDeviceList,
+  renderDeviceModal,
+  renderActivationModal,
+} from "./components";
+
+function shell(title: string, body: string, script: string) {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${title}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
-    :root { --bg:#f3f4f8; --card:#fff; --text:#111827; --muted:#6b7280; --line:#e5e7eb; --brand:#0f766e; --danger:#b91c1c; --warn:#a16207; }
+    :root {
+      --bg: #f8f9fa;
+      --card: #ffffff;
+      --text: #202124;
+      --text-secondary: #5f6368;
+      --muted: #80868b;
+      --line: #dadce0;
+      --brand: #0f766e;
+      --brand-light: #14b8a6;
+      --brand-dark: #0d5d56;
+      --danger: #d93025;
+      --danger-light: #fce8e6;
+      --warn: #f9ab00;
+      --success: #1e8e3e;
+      --success-light: #e6f4ea;
+      --shadow-1: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+      --shadow-2: 0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 2px rgba(60,64,67,0.15);
+      --shadow-3: 0 4px 4px 0 rgba(60,64,67,0.3), 0 8px 12px 6px rgba(60,64,67,0.15);
+      --radius: 4px;
+      --radius-lg: 8px;
+    }
     * { box-sizing: border-box; }
-    body { margin:0; font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
-    .wrap { max-width: 1280px; margin: 20px auto; padding: 0 14px; }
-    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
-    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    body {
+      margin: 0;
+      font-family: "Roboto", "Noto Sans SC", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-1);
+    }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .row-stretch { align-items: stretch; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
     @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
-    h2,h3 { margin:0 0 10px; }
-    .muted { color:var(--muted); font-size:13px; }
-    .ok { color:#166534; }
-    .err { color:#b91c1c; }
-    .warn { color:var(--warn); }
-    label { font-size:13px; color:#374151; display:block; margin-bottom:4px; }
-    input,select,textarea,button { border:1px solid var(--line); border-radius:8px; font-size:14px; padding:8px 10px; }
-    input,select,textarea { background:#fff; color:var(--text); }
-    button { background:var(--brand); border-color:var(--brand); color:#fff; cursor:pointer; }
-    button.secondary { background:#fff; color:#111827; }
-    button.danger { background:var(--danger); border-color:var(--danger); }
-    table { width:100%; border-collapse:collapse; font-size:13px; }
-    th,td { border-bottom:1px solid var(--line); padding:8px; text-align:left; vertical-align:top; }
-    .right { margin-left:auto; }
-    .mono { font-family: Consolas, Monaco, monospace; }
-    .badge { display:inline-block; padding:2px 6px; border-radius:999px; font-size:12px; }
-    .badge.active { background:#dcfce7; color:#166534; }
-    .badge.disabled { background:#fee2e2; color:#991b1b; }
-    .modal { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; z-index:20; }
-    .modal.open { display:flex; }
-    .modal-card { width:min(980px,92vw); max-height:86vh; overflow:auto; background:#fff; border-radius:12px; padding:14px; }
-    .tree details { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; }
-    .tree summary { cursor:pointer; }
+    h2, h3 { margin: 0 0 16px; font-weight: 500; }
+    h2 { font-size: 24px; }
+    h3 { font-size: 18px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .ok { color: var(--success); }
+    .err { color: var(--danger); }
+    .warn { color: var(--warn); }
+    label { font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 6px; font-weight: 500; }
+    input, select, textarea {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 14px;
+      padding: 10px 12px;
+      background: var(--card);
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--brand);
+      box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.2);
+    }
+    input::placeholder { color: var(--muted); }
+    button {
+      background: var(--brand);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 10px 24px;
+      text-transform: none;
+      letter-spacing: 0.25px;
+      box-shadow: var(--shadow-1);
+      transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+    }
+    button:hover { background: var(--brand-dark); box-shadow: var(--shadow-2); }
+    button:active { transform: scale(0.98); }
+    button:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; box-shadow: none; }
+    button.secondary {
+      background: var(--card);
+      color: var(--brand);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+    button.secondary:hover { background: #f1f3f4; box-shadow: var(--shadow-1); }
+    button.danger { background: var(--danger); }
+    button.danger:hover { background: #b71c1c; }
+    button.text { background: transparent; color: var(--brand); box-shadow: none; }
+    button.text:hover { background: rgba(15, 118, 110, 0.08); }
+    button.small { padding: 6px 12px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 12px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
+    th { font-weight: 500; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; background: #f8f9fa; }
+    .right { margin-left: auto; }
+    .mono { font-family: "Roboto Mono", Consolas, Monaco, monospace; font-size: 13px; }
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .badge.active { background: var(--success-light); color: var(--success); }
+    .badge.disabled { background: var(--danger-light); color: var(--danger); }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 1000;
+      padding: 0;
+    }
+    .modal.open { display: flex; }
+    .modal-card {
+      width: min(560px, 100vw);
+      background: var(--card);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      box-shadow: var(--shadow-3);
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    .modal-header h3 { margin: 0; }
+    .modal-body { padding: 24px; }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 16px 24px;
+      border-top: 1px solid var(--line);
+    }
+    .tree details { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-bottom: 8px; }
+    .tree summary { cursor: pointer; font-weight: 500; }
+    @media (max-width: 768px) {
+      .wrap { margin: 16px auto; padding: 0 12px; }
+      .card { padding: 16px; margin-bottom: 12px; }
+      h2 { font-size: 20px; }
+      h3 { font-size: 16px; }
+      input, select, button { min-height: 44px; font-size: 16px; padding: 12px 16px; }
+      button { padding: 12px 20px; }
+      table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .row { flex-direction: column; align-items: stretch; }
+      .grid { grid-template-columns: 1fr; }
+      .right { margin-left: 0; margin-top: 12px; }
+      .hide-mobile { display: none; }
+      .modal-card { width: 100vw; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+    }
+  </style>
+  <style>
+    .login-container { max-width: 400px; margin: 80px auto; }
+    .login-header { margin-bottom: 24px; text-align: center; }
+    .login-header h2 { margin-bottom: 8px; }
+    .login-form { display: flex; flex-direction: column; gap: 16px; }
+    .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; color: var(--text-secondary); }
+    .checkbox-label input { width: 18px; height: 18px; margin: 0; }
+    .login-actions { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+    .search-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .search-bar input { flex: 1; min-width: 160px; }
+    .search-bar .search-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .batch-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 16px;
+    }
+    .batch-actions .count { font-size: 14px; color: var(--text-secondary); }
+    .batch-actions input[type="number"] { width: 70px; padding: 8px 12px; }
+    .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .table-actions button { padding: 6px 12px; font-size: 12px; }
+    .create-form { display: flex; flex-direction: column; gap: 16px; }
+    .create-form .form-row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .create-form .form-group { min-width: 140px; flex: 1; }
+    .create-form .form-group.full { flex: 1 1 100%; }
+    .create-form input, .create-form select { width: 100%; }
+    .copy-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      margin-left: 6px;
+      background: #f1f3f4;
+      color: var(--text-secondary);
+      border: 1px solid var(--line);
+      vertical-align: middle;
+    }
+    .copy-btn:hover { background: #e8eaed; }
+    .copy-btn.copied { background: var(--success); color: #fff; border-color: var(--success); }
+    .batch-copy-btn { background: var(--brand); }
+    .modal-close {
+      background: transparent;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 4px;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+    }
+    .modal-close:hover { background: #f1f3f4; color: var(--text); }
+    .admin-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .admin-header h2 { margin: 0; }
+    .admin-header .user-info { font-size: 14px; color: var(--text-secondary); }
+    @media (max-width: 768px) {
+      .login-container { margin: 48px auto; padding: 0 16px; }
+      .admin-header { flex-direction: column; align-items: flex-start; }
+      .search-bar { flex-direction: column; width: 100%; }
+      .search-bar input { width: 100%; }
+      .batch-actions { flex-direction: column; align-items: flex-start; }
+      .batch-actions > * { width: 100%; }
+      .create-form .form-row { flex-direction: column; }
+      .create-form .form-group { width: 100%; }
+      .table-actions { flex-direction: column; }
+      .table-actions button { width: 100%; margin-bottom: 4px; }
+    }
+  </style>
+  <style>
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      background: #323232;
+      color: #fff;
+      padding: 14px 24px;
+      border-radius: 4px;
+      font-size: 14px;
+      box-shadow: var(--shadow-3);
+      animation: toastIn 0.3s ease;
+      pointer-events: auto;
+      max-width: 400px;
+    }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+    .toast.warning { background: var(--warn); color: var(--text); }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 9999;
+      padding: 0;
+    }
+    .confirm-overlay.open { display: flex; }
+    .confirm-dialog {
+      width: min(400px, 100vw);
+      background: var(--card);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      box-shadow: var(--shadow-3);
+      animation: slideUp 0.3s ease;
+    }
+    .confirm-header { padding: 20px 24px 0; }
+    .confirm-title { font-size: 20px; font-weight: 500; margin: 0 0 8px; }
+    .confirm-message { font-size: 14px; color: var(--text-secondary); margin: 0 0 20px; }
+    .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--line); }
   </style>
 </head>
 <body>
   <div class="wrap">${body}</div>
+  <div id="toastContainer" class="toast-container"></div>
+  <div id="confirmOverlay" class="confirm-overlay">
+    <div class="confirm-dialog">
+      <div class="confirm-header">
+        <h3 id="confirmTitle" class="confirm-title">确认操作</h3>
+        <p id="confirmMessage" class="confirm-message"></p>
+      </div>
+      <div class="confirm-actions">
+        <button id="confirmCancel" class="secondary">取消</button>
+        <button id="confirmOk">确定</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    function showToast(message, type) {
+      var container = document.getElementById('toastContainer');
+      var toast = document.createElement('div');
+      toast.className = 'toast ' + (type || '');
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(20px)';
+        toast.style.transition = 'opacity 0.3s, transform 0.3s';
+        setTimeout(function() { container.removeChild(toast); }, 300);
+      }, 3000);
+    }
+    function showConfirm(title, message) {
+      return new Promise(function(resolve) {
+        var overlay = document.getElementById('confirmOverlay');
+        document.getElementById('confirmTitle').textContent = title;
+        document.getElementById('confirmMessage').textContent = message;
+        overlay.classList.add('open');
+        function cleanup() {
+          overlay.classList.remove('open');
+          document.getElementById('confirmOk').onclick = null;
+          document.getElementById('confirmCancel').onclick = null;
+        }
+        document.getElementById('confirmOk').onclick = function() { cleanup(); resolve(true); };
+        document.getElementById('confirmCancel').onclick = function() { cleanup(); resolve(false); };
+      });
+    }
+  </script>
   <script>${script}</script>
 </body>
 </html>`;
 }
 
 export function renderLoginPage() {
-  return shell(
-    "SN 管理员登录",
-    `
-<div class="card" style="max-width:460px;margin:90px auto;">
-  <h2>SN 管理员登录</h2>
-  <p class="muted">登录成功后将被重定向到 <code>/admin</code>。</p>
-  <label>用户名</label>
-  <input id="username" placeholder="superadmin" style="width:100%" />
-  <label style="margin-top:8px">密码</label>
-  <input id="password" type="password" placeholder="password" style="width:100%" />
-  <div class="row" style="margin-top:10px"><label><input id="slider" type="checkbox" checked /> 滑块验证已通过</label></div>
-  <div class="row" style="margin-top:10px">
-    <button id="loginBtn">登录</button>
-    <span id="msg" class="muted"></span>
-  </div>
-</div>`,
-    `
-const msg = document.getElementById("msg");
-document.getElementById("loginBtn").addEventListener("click", async () => {
-  msg.className = "muted";
-  msg.textContent = "正在登录...";
-  try {
-    const r = await fetch("/web/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: document.getElementById("username").value.trim(),
-        password: document.getElementById("password").value.trim(),
-        sliderPassed: document.getElementById("slider").checked
-      })
-    });
-    const j = await r.json().catch(() => ({}));
-    if (j.code === 200) {
-      msg.className = "ok";
-      msg.textContent = "登录成功";
-      location.href = "/admin";
-      return;
-    }
-    msg.className = "err";
-    msg.textContent = j.msg || ("HTTP " + r.status);
-  } catch (e) {
-    msg.className = "err";
-    msg.textContent = String(e);
-  }
-});`,
-  );
+  const { title, body, script } = renderLoginPageComponent();
+  return shell(title, body, script);
 }
 
 export function renderAdminPage() {
-  return shell(
-    "SN 管理后台",
-    `
-<div class="card row">
+  const createCode = renderCreateCodeCard();
+  const activationList = renderActivationCodeList();
+  const deviceList = renderDeviceList();
+  const deviceModal = renderDeviceModal();
+  const activationModal = renderActivationModal();
+
+  const body = `
+<div class="card admin-header">
   <h2>SN 管理后台</h2>
-  <span id="me" class="muted"></span>
-  <button id="logoutBtn" class="secondary right">退出登录</button>
-</div>
-
-<div class="card">
-  <h3>创建激活码</h3>
-  <p class="muted">格式: <code>XXXX-XXXX-XXXX-XXXX</code>。</p>
   <div class="row">
-    <div><label>数量</label><input id="count" type="number" min="1" max="200" value="1" /></div>
-    <div><label>卡类型</label><select id="cardType"><option value="day">天卡</option><option value="week">周卡</option><option value="month" selected>月卡</option><option value="trial">体验卡</option><option value="trial3h">体验卡3小时</option><option value="permanent">永久卡</option></select></div>
-    <div><label>最大使用次数</label><input id="maxUses" type="number" min="1" value="1" /></div>
-    <div><label>设备限制</label><input id="deviceLimit" type="number" min="1" value="1" /></div>
-  </div>
-  <div class="row">
-    <div><label>前缀(可选)</label><input id="prefix" value="SN" /></div>
-    <div style="min-width:220px"><label>发放给</label><input id="issuedTo" placeholder="team-a" /></div>
-    <div style="flex:1"><label>备注</label><input id="note" placeholder="description" style="width:100%" /></div>
-  </div>
-  <div class="row" style="margin-top:8px">
-    <button id="createBtn">创建</button>
-    <span id="createMsg" class="muted"></span>
-  </div>
-  <pre id="createDetail" class="muted mono" style="white-space:pre-wrap;margin-top:8px;"></pre>
-</div>
-
-<div class="card">
-  <div class="row">
-    <h3>设备管理</h3>
-    <input id="deviceSearchKw" placeholder="搜索设备ID/名称/激活码" />
-    <button id="deviceSearchBtn" class="secondary">搜索</button>
-    <button id="devicePrevBtn" class="secondary">上一页</button>
-    <button id="deviceNextBtn" class="secondary">下一页</button>
-    <span id="devicePageInfo" class="muted"></span>
-  </div>
-  <div class="row" style="margin-bottom:8px;">
-    <span id="deviceSelectedInfo" class="muted">已选择: 0</span>
-    <button id="deviceBatchDeleteBtn" class="danger">批量删除</button>
-    <span id="deviceBatchMsg" class="muted"></span>
-  </div>
-  <table>
-    <thead><tr>
-      <th><input id="deviceCheckAll" type="checkbox" /></th>
-      <th>设备ID</th>
-      <th>设备名称</th>
-      <th>激活状态</th>
-      <th>有效期至</th>
-      <th>激活码数</th>
-      <th>最后活跃</th>
-      <th>操作</th>
-    </tr></thead>
-    <tbody id="deviceTbodyMain"></tbody>
-  </table>
-  <div class="row"><span id="deviceListMsg" class="muted"></span></div>
-</div>
-
-<div class="card">
-  <div class="row">
-    <h3>激活码列表</h3>
-    <input id="kw" placeholder="关键字: code / issuedTo / note / device" />
-    <select id="status"><option value="">全部</option><option value="active">启用</option><option value="disabled">禁用</option></select>
-    <button id="queryBtn" class="secondary">查询</button>
-    <button id="prevBtn" class="secondary">上一页</button>
-    <button id="nextBtn" class="secondary">下一页</button>
-    <span id="pageInfo" class="muted"></span>
-  </div>
-  <div class="row" style="margin-bottom:8px;">
-    <span id="selectedInfo" class="muted">已选择: 0</span>
-    <input id="batchDays" type="number" min="0" value="7" style="width:90px" />
-    <input id="batchUses" type="number" min="0" value="0" style="width:90px" />
-    <button id="batchDisableBtn" class="danger">批量禁用</button>
-    <button id="batchRenewBtn" class="secondary">批量续期</button>
-    <button id="batchDeleteBtn" class="danger">批量删除</button>
-    <span id="batchMsg" class="muted"></span>
-  </div>
-  <table>
-    <thead><tr><th><input id="checkAll" type="checkbox" /></th><th>激活码</th><th>卡类型</th><th>状态</th><th>使用次数</th><th>设备数</th><th>激活时间</th><th>过期时间</th><th>操作</th></tr></thead>
-    <tbody id="tbody"></tbody>
-  </table>
-  <div class="row"><span id="listMsg" class="muted"></span></div>
-</div>
-
-<div id="deviceModal" class="modal">
-  <div class="modal-card">
-    <div class="row">
-      <h3>设备使用详情</h3>
-      <button id="closeDeviceModal" class="secondary right">关闭</button>
-    </div>
-    <table>
-      <thead><tr><th>deviceId</th><th>设备名称</th><th>App版本</th><th>IP地址</th><th>首次出现</th><th>最后出现</th><th>使用次数</th></tr></thead>
-      <tbody id="deviceTbody"></tbody>
-    </table>
+    <span id="me" class="user-info"></span>
+    <button id="logoutBtn" class="secondary">退出登录</button>
   </div>
 </div>
 
-<div id="deviceActivationModal" class="modal">
-  <div class="modal-card">
-    <div class="row">
-      <h3>设备激活记录</h3>
-      <button id="closeDeviceActivationModal" class="secondary right">关闭</button>
-    </div>
-    <div id="deviceActivationInfo" class="muted" style="margin-bottom: 12px;"></div>
-    <table>
-      <thead><tr>
-        <th>激活码</th>
-        <th>卡类型</th>
-        <th>激活时间</th>
-        <th>过期时间</th>
-        <th>续期次数</th>
-        <th>状态</th>
-        <th>操作</th>
-      </tr></thead>
-      <tbody id="deviceActivationTbody"></tbody>
-    </table>
-  </div>
-</div>`,
-    `
-let page = 1;
-const pageSize = 20;
-let pagination = { page:1, totalPages:1, total:0 };
-const selectedCodes = new Set();
+${createCode.body}
 
-let devicePage = 1;
-let devicePagination = { page:1, totalPages:1, total:0 };
-const selectedDevices = new Set();
+${deviceList.body}
 
-const meEl = document.getElementById("me");
-const tbody = document.getElementById("tbody");
-const listMsg = document.getElementById("listMsg");
-const pageInfo = document.getElementById("pageInfo");
-const createMsg = document.getElementById("createMsg");
-const createDetail = document.getElementById("createDetail");
-const deviceModal = document.getElementById("deviceModal");
-const deviceTbody = document.getElementById("deviceTbody");
-const batchMsg = document.getElementById("batchMsg");
-const selectedInfo = document.getElementById("selectedInfo");
-const checkAll = document.getElementById("checkAll");
+${activationList.body}
 
-const deviceTbodyMain = document.getElementById("deviceTbodyMain");
-const deviceListMsg = document.getElementById("deviceListMsg");
-const devicePageInfo = document.getElementById("devicePageInfo");
-const deviceActivationModal = document.getElementById("deviceActivationModal");
-const deviceActivationTbody = document.getElementById("deviceActivationTbody");
-const deviceActivationInfo = document.getElementById("deviceActivationInfo");
-const deviceSelectedInfo = document.getElementById("deviceSelectedInfo");
-const deviceCheckAll = document.getElementById("deviceCheckAll");
-const deviceBatchMsg = document.getElementById("deviceBatchMsg");
+${deviceModal.body}
+
+${activationModal.body}`;
+
+  const script = `
+var meEl = document.getElementById("me");
 
 async function api(path, init) {
-  const r = await fetch(path, init);
-  const j = await r.json().catch(() => ({}));
+  var r = await fetch(path, init);
+  var j = await r.json().catch(function() { return {}; });
   if (j.code !== 200) throw new Error(j.msg || ("HTTP " + r.status));
   return j;
 }
-function fmtTs(v){ if(!v) return "-"; return new Date(Number(v)*1000).toLocaleString(); }
-function fmtCardType(v){
-  const t = String(v || "").toLowerCase();
-  if (t === "day") return "天卡";
-  if (t === "week") return "周卡";
-  if (t === "month") return "月卡";
-  if (t === "trial") return "体验卡";
-  if (t === "trial3h") return "体验卡3小时";
-  if (t === "permanent") return "永久卡";
-  return t || "-";
-}
-function esc(v){ 
-  return String(v ?? "").replace(/[<>&"]/g, (m) => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;", '"':"&quot;" }[m] || m)); 
-}
-function getSelectedCodes(){ return Array.from(selectedCodes.values()); }
-function syncSelectedInfo(){ selectedInfo.textContent = "已选择: " + selectedCodes.size; }
-function syncDeviceSelectedInfo(){ deviceSelectedInfo.textContent = "已选择: " + selectedDevices.size; }
-function getSelectedDevices(){ return Array.from(selectedDevices.values()); }
 
 async function ensureLogin() {
   try {
-    const j = await api("/web/me");
-    meEl.textContent = "当前用户: " + (j.data?.username || "");
+    var j = await api("/web/me");
+    meEl.textContent = "当前用户: " + (j.data && j.data.username || "");
   } catch {
     location.href = "/admin/login";
   }
 }
 
-async function loadList(){
-  listMsg.className = "muted";
-  listMsg.textContent = "加载中...";
-  const kw = document.getElementById("kw").value.trim();
-  const status = document.getElementById("status").value;
-  try {
-    const q = new URLSearchParams({ page:String(page), pageSize:String(pageSize), keyword:kw, status });
-    const j = await api("/admin/activation-codes?" + q.toString());
-    pagination = j.pagination || pagination;
-    const rows = j.data || [];
-    tbody.innerHTML = rows.map((x) => {
-      const checked = selectedCodes.has(x.code) ? "checked" : "";
-      const statusText = x.status === "active" ? "启用" : "禁用";
-      return '<tr>'
-        + '<td><input type="checkbox" data-act="pick" data-code="' + esc(x.code) + '" ' + checked + ' /></td>'
-        + '<td class="mono">' + esc(x.code) + '</td>'
-        + '<td>' + fmtCardType(x.cardType) + '</td>'
-        + '<td><span class="badge ' + (x.status === "active" ? "active" : "disabled") + '">' + statusText + '</span></td>'
-        + '<td>' + x.usedCount + '/' + x.maxUses + '</td>'
-        + '<td>' + (x.deviceCount || 0) + '/' + (x.deviceLimit || 1) + '</td>'
-        + '<td>' + fmtTs(x.activatedAt) + '</td>'
-        + '<td>' + fmtTs(x.expiresAt) + '</td>'
-        + '<td class="row">'
-        + '<button data-act="devices" data-code="' + esc(x.code) + '" class="secondary">设备</button>'
-        + '<button data-act="disable" data-code="' + esc(x.code) + '" class="danger">禁用</button>'
-        + '<button data-act="renew" data-code="' + esc(x.code) + '" class="secondary">续期+7天</button>'
-        + '</td>'
-        + '</tr>';
-    }).join("");
-    pageInfo.textContent = "第 " + pagination.page + "/" + pagination.totalPages + " 页";
-    listMsg.textContent = "共 " + (pagination.total || 0) + " 条";
-    syncSelectedInfo();
-    checkAll.checked = rows.length > 0 && rows.every((x) => selectedCodes.has(x.code));
-  } catch (e) {
-    listMsg.className = "err";
-    listMsg.textContent = String(e);
-  }
-}
+${createCode.script}
 
-async function loadDevices(code){
-  deviceTbody.innerHTML = "<tr><td colspan='7'>加载中...</td></tr>";
-  deviceModal.classList.add("open");
-  try {
-    const j = await api("/admin/activation-codes/" + encodeURIComponent(code) + "/usages");
-    const rows = j.data || [];
-    deviceTbody.innerHTML = rows.length ? rows.map((x) => "<tr>"
-      + "<td class=\\"mono\\">" + esc(x.deviceId) + "</td>"
-      + "<td>" + esc(x.deviceName) + "</td>"
-      + "<td>" + esc(x.appVersion) + "</td>"
-      + "<td>" + esc(x.clientIp) + "</td>"
-      + "<td>" + fmtTs(x.firstSeenAt) + "</td>"
-      + "<td>" + fmtTs(x.lastSeenAt) + "</td>"
-      + "<td>" + esc(x.useCount) + "</td>"
-      + "</tr>").join("") : "<tr><td colspan='7'>暂无设备记录</td></tr>";
-  } catch (e) {
-    deviceTbody.innerHTML = "<tr><td colspan='7'>" + esc(String(e)) + "</td></tr>";
-  }
-}
+${activationList.script}
 
-async function loadDevicesPage() {
-  deviceListMsg.className = "muted";
-  deviceListMsg.textContent = "加载中...";
-  const keyword = document.getElementById("deviceSearchKw").value.trim();
-  try {
-    const q = new URLSearchParams({ 
-      page: String(devicePage), 
-      pageSize: "10", 
-      keyword 
-    });
-    const j = await api("/admin/devices?" + q.toString());
-    devicePagination = j.pagination || devicePagination;
-    const rows = j.data || [];
-    
-    deviceTbodyMain.innerHTML = rows.map((d) => {
-      const checked = selectedDevices.has(d.deviceId) ? "checked" : "";
-      const status = d.deviceStatus === "active" ? 
-        '<span class="badge active">有效</span>' : 
-        '<span class="badge disabled">过期</span>';
-      const validUntil = d.totalValidUntil ? 
-        new Date(Number(d.totalValidUntil) * 1000).toLocaleString() : 
-        (d.deviceStatus === "active" ? "永久" : "已过期");
-      
-      return "<tr>"
-        + '<td><input type="checkbox" data-act="pickDevice" data-device="' + esc(d.deviceId) + '" ' + checked + ' /></td>'
-        + '<td class="mono">' + esc(d.deviceId) + '</td>'
-        + '<td>' + esc(d.deviceName) + '</td>'
-        + '<td>' + status + '</td>'
-        + '<td>' + validUntil + '</td>'
-        + '<td>' + esc(d.activationCount) + '</td>'
-        + '<td>' + (d.lastSeenAt ? new Date(Number(d.lastSeenAt) * 1000).toLocaleString() : "-") + '</td>'
-        + '<td class="row">'
-        + '<button data-act="viewDevice" data-device="' + esc(d.deviceId) + '" class="secondary">查看激活</button>'
-        + '<button data-act="deleteDevice" data-device="' + esc(d.deviceId) + '" class="danger">删除</button>'
-        + '</td>'
-        + '</tr>';
-    }).join("");
-    
-    devicePageInfo.textContent = "第 " + devicePagination.page + "/" + devicePagination.totalPages + " 页";
-    deviceListMsg.textContent = "共 " + (devicePagination.total || 0) + " 台设备";
-    syncDeviceSelectedInfo();
-    deviceCheckAll.checked = rows.length > 0 && rows.every((d) => selectedDevices.has(d.deviceId));
-  } catch (e) {
-    deviceListMsg.className = "err";
-    deviceListMsg.textContent = String(e);
-  }
-}
+${deviceList.script}
 
-async function loadDeviceActivations(deviceId) {
-  deviceActivationTbody.innerHTML = "<tr><td colspan='7'>加载中...</td></tr>";
-  deviceActivationModal.classList.add("open");
-  
-  try {
-    const j = await api("/admin/devices/" + encodeURIComponent(deviceId) + "/activations");
-    const rows = j.data || [];
-    
-    deviceActivationInfo.innerHTML = "设备: <span class=\\"mono\\">" + esc(deviceId) + "</span> | 激活记录: " + rows.length;
-    
-    deviceActivationTbody.innerHTML = rows.length ? rows.map((a) => {
-      const status = a.isActive ? 
-        '<span class="badge active">有效</span>' : 
-        '<span class="badge disabled">过期</span>';
-      const cardTypeText = fmtCardType(a.cardType);
-      
-      return "<tr>"
-        + "<td class=\\"mono\\">" + esc(a.activationCode) + "</td>"
-        + "<td>" + cardTypeText + "</td>"
-        + "<td>" + (a.activatedAt ? new Date(Number(a.activatedAt) * 1000).toLocaleString() : "-") + "</td>"
-        + "<td>" + (a.expiresAt ? new Date(Number(a.expiresAt) * 1000).toLocaleString() : (a.cardType === "permanent" ? "永久" : "-")) + "</td>"
-        + "<td>" + esc(a.renewalCount) + "</td>"
-        + "<td>" + status + "</td>"
-        + "<td><button data-act=\\"renewDevice\\" data-device=\\"" + esc(deviceId) + "\\" data-code=\\"" + esc(a.activationCode) + "\\" class=\\"secondary\\">续期</button></td>"
-        + "</tr>";
-    }).join("") : "<tr><td colspan='7'>暂无激活记录</td></tr>";
-  } catch (e) {
-    deviceActivationTbody.innerHTML = "<tr><td colspan='7'>" + esc(String(e)) + "</td></tr>";
-  }
-}
+${deviceModal.script}
 
-tbody.addEventListener("click", async (e) => {
-  const t = e.target;
-  if (!t.dataset) return;
-  const code = t.dataset.code;
-  const act = t.dataset.act;
-  if (!code || !act) return;
-  try {
-    if (act === "devices") return loadDevices(code);
-    if (act === "disable") {
-      if (!confirm("确定禁用 " + code + " 吗？")) return;
-      await api("/admin/activation-codes/" + encodeURIComponent(code) + "/disable", { method:"POST" });
-    }
-    if (act === "renew") {
-      if (!confirm("确定续期 " + code + " 7天并重新激活吗？")) return;
-      await api("/admin/activation-codes/" + encodeURIComponent(code) + "/renew", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ addDays:7, addUses:0, reactivate:true })
-      });
-    }
-    await loadList();
+${activationModal.script}
 
-    await loadDevicesPage();
-  } catch (e2) {
-    alert(String(e2));
-  }
-});
-
-tbody.addEventListener("change", (e) => {
-  const t = e.target;
-  if (!t.dataset || t.dataset.act !== "pick") return;
-  const code = t.dataset.code;
-  if (!code) return;
-  if (t.checked) selectedCodes.add(code); else selectedCodes.delete(code);
-  syncSelectedInfo();
-});
-
-checkAll.addEventListener("change", () => {
-  const boxes = Array.from(document.querySelectorAll("input[data-act='pick']"));
-  boxes.forEach((b) => {
-    b.checked = checkAll.checked;
-    const code = b.dataset.code;
-    if (code) {
-      if (checkAll.checked) selectedCodes.add(code); else selectedCodes.delete(code);
-    }
-  });
-  syncSelectedInfo();
-});
-
-async function runBatch(path, payload, confirmText){
-  const codes = getSelectedCodes();
-  if (!codes.length) throw new Error("请先选择激活码");
-  if (confirmText && !confirm(confirmText + " (" + codes.length + ")")) return null;
-  return api(path, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ ...payload, codes })
-  });
-}
-
-document.getElementById("batchDisableBtn").addEventListener("click", async () => {
-  batchMsg.className = "muted";
-  batchMsg.textContent = "处理中...";
-  try {
-    const j = await runBatch("/admin/activation-codes/batch-disable", {}, "确定批量禁用选中的激活码吗？");
-    if (!j) return;
-    batchMsg.className = "ok";
-    batchMsg.textContent = "已禁用 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
-    await loadList();
-
-    await loadDevicesPage();
-  } catch (e) {
-    batchMsg.className = "err";
-    batchMsg.textContent = String(e);
-  }
-});
-
-document.getElementById("batchRenewBtn").addEventListener("click", async () => {
-  batchMsg.className = "muted";
-  batchMsg.textContent = "处理中...";
-  try {
-    const addDays = Number(document.getElementById("batchDays").value || 0);
-    const addUses = Number(document.getElementById("batchUses").value || 0);
-    const j = await runBatch("/admin/activation-codes/batch-renew", { addDays, addUses, reactivate:true }, "确定批量续期选中的激活码吗？");
-    if (!j) return;
-    batchMsg.className = "ok";
-    batchMsg.textContent = "已续期 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
-    await loadList();
-
-    await loadDevicesPage();
-  } catch (e) {
-    batchMsg.className = "err";
-    batchMsg.textContent = String(e);
-  }
-});
-
-document.getElementById("batchDeleteBtn").addEventListener("click", async () => {
-  batchMsg.className = "muted";
-  batchMsg.textContent = "处理中...";
-  try {
-    const j = await runBatch("/admin/activation-codes/batch-delete", {}, "确定批量删除选中的激活码吗？此操作不可撤销。");
-    if (!j) return;
-    const codes = getSelectedCodes();
-    codes.forEach((x) => selectedCodes.delete(x));
-    syncSelectedInfo();
-    batchMsg.className = "ok";
-    batchMsg.textContent = "已删除 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
-    await loadList();
-
-    await loadDevicesPage();
-  } catch (e) {
-    batchMsg.className = "err";
-    batchMsg.textContent = String(e);
-  }
-});
-
-document.getElementById("queryBtn").addEventListener("click", () => { page = 1; loadList(); });
-document.getElementById("prevBtn").addEventListener("click", () => { if (page > 1) { page -= 1; loadList(); } });
-document.getElementById("nextBtn").addEventListener("click", () => { if (page < (pagination.totalPages || 1)) { page += 1; loadList(); } });
-
-document.getElementById("createBtn").addEventListener("click", async () => {
-  createMsg.className = "muted";
-  createDetail.textContent = "";
-  createMsg.textContent = "提交中...";
-  try {
-    const payload = {
-      count: Number(document.getElementById("count").value || 1),
-      cardType: document.getElementById("cardType").value || "month",
-      maxUses: Number(document.getElementById("maxUses").value || 1),
-      deviceLimit: Number(document.getElementById("deviceLimit").value || 1),
-      prefix: document.getElementById("prefix").value || "SN",
-      issuedTo: document.getElementById("issuedTo").value || "",
-      note: document.getElementById("note").value || ""
-    };
-    const j = await api("/admin/activation-codes", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify(payload),
-    });
-    const created = j.data || [];
-    createMsg.className = "ok";
-    createMsg.textContent = "已创建: " + created.length;
-    createDetail.textContent = created.map((x) => x.code).join("\\n");
-    await loadList();
-
-    await loadDevicesPage();
-  } catch (e) {
-    createMsg.className = "err";
-    createMsg.textContent = String(e);
-  }
-});
-
-document.getElementById("closeDeviceModal").addEventListener("click", () => deviceModal.classList.remove("open"));
-deviceModal.addEventListener("click", (e) => { if (e.target === deviceModal) deviceModal.classList.remove("open"); });
-
-document.getElementById("closeDeviceActivationModal").addEventListener("click", () => 
-  deviceActivationModal.classList.remove("open")
-);
-deviceActivationModal.addEventListener("click", (e) => { 
-  if (e.target === deviceActivationModal) 
-    deviceActivationModal.classList.remove("open"); 
-});
-
-deviceTbodyMain.addEventListener("click", async (e) => {
-  const t = e.target;
-  if (!t.dataset) return;
-  const deviceId = t.dataset.device;
-  const act = t.dataset.act;
-  if (!deviceId || !act) return;
-  
-  if (act === "viewDevice") {
-    await loadDeviceActivations(deviceId);
-  }
-  if (act === "deleteDevice") {
-    if (!confirm("确定删除设备 " + deviceId + " 吗？此操作不可撤销。")) return;
-    try {
-      await api("/admin/devices/" + encodeURIComponent(deviceId), { method: "DELETE" });
-      await loadDevicesPage();
-    } catch (e2) {
-      alert(String(e2));
-    }
-  }
-});
-
-deviceTbodyMain.addEventListener("change", (e) => {
-  const t = e.target;
-  if (!t.dataset || t.dataset.act !== "pickDevice") return;
-  const deviceId = t.dataset.device;
-  if (!deviceId) return;
-  if (t.checked) selectedDevices.add(deviceId); else selectedDevices.delete(deviceId);
-  syncDeviceSelectedInfo();
-});
-
-deviceCheckAll.addEventListener("change", () => {
-  const boxes = Array.from(document.querySelectorAll("input[data-act='pickDevice']"));
-  boxes.forEach((b) => {
-    b.checked = deviceCheckAll.checked;
-    const deviceId = b.dataset.device;
-    if (deviceId) {
-      if (deviceCheckAll.checked) selectedDevices.add(deviceId); else selectedDevices.delete(deviceId);
-    }
-  });
-  syncDeviceSelectedInfo();
-});
-
-deviceActivationTbody.addEventListener("click", async (e) => {
-  const t = e.target;
-  if (!t.dataset) return;
-  const deviceId = t.dataset.device;
-  const code = t.dataset.code;
-  const act = t.dataset.act;
-  if (!deviceId || !code || !act) return;
-  
-  if (act === "renewDevice") {
-    const addDays = prompt("续期天数:", "30");
-    const addUses = prompt("增加使用次数 (0表示不增加):", "0");
-    if (addDays === null || addUses === null) return;
-    
-    try {
-      await api("/admin/devices/renew", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId,
-          activationCode: code,
-          addDays: Number(addDays || 0),
-          addUses: Number(addUses || 0)
-        })
-      });
-      alert("续期成功");
-      await loadDeviceActivations(deviceId);
-      await loadDevicesPage();
-    } catch (e2) {
-      alert("续期失败: " + String(e2));
-    }
-  }
-});
-
-document.getElementById("deviceSearchBtn").addEventListener("click", () => { 
-  devicePage = 1; 
-  loadDevicesPage(); 
-});
-document.getElementById("devicePrevBtn").addEventListener("click", () => { 
-  if (devicePage > 1) { 
-    devicePage -= 1; 
-    loadDevicesPage(); 
-  } 
-});
-document.getElementById("deviceNextBtn").addEventListener("click", () => { 
-  if (devicePage < (devicePagination.totalPages || 1)) { 
-    devicePage += 1; 
-    loadDevicesPage(); 
-  } 
-});
-
-document.getElementById("deviceBatchDeleteBtn").addEventListener("click", async () => {
-  deviceBatchMsg.className = "muted";
-  deviceBatchMsg.textContent = "处理中...";
-  try {
-    const deviceIds = getSelectedDevices();
-    if (!deviceIds.length) {
-      deviceBatchMsg.className = "err";
-      deviceBatchMsg.textContent = "请先选择设备";
-      return;
-    }
-    if (!confirm("确定批量删除选中的 " + deviceIds.length + " 台设备吗？此操作不可撤销。")) return;
-    const j = await api("/admin/devices/batch-delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceIds })
-    });
-    selectedDevices.clear();
-    syncDeviceSelectedInfo();
-    deviceBatchMsg.className = "ok";
-    deviceBatchMsg.textContent = "已删除 " + (j.data?.affected || 0) + "/" + (j.data?.requested || 0);
-    await loadDevicesPage();
-  } catch (e) {
-    deviceBatchMsg.className = "err";
-    deviceBatchMsg.textContent = String(e);
-  }
-});
-
-document.getElementById("logoutBtn").addEventListener("click", async () => { 
-  await fetch("/web/logout", { method:"POST" }); 
+document.getElementById("logoutBtn").addEventListener("click", async function() { 
+  await fetch("/web/logout", { method: "POST" }); 
   location.href = "/admin/login"; 
 });
 
 ensureLogin();
-loadList();
-loadDevicesPage();`,
-  );
+if (typeof loadList === "function") loadList();
+if (typeof loadDevicesPage === "function") loadDevicesPage();`;
+
+  return shell("SN 管理后台", body, script);
 }
