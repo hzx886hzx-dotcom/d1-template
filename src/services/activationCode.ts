@@ -487,7 +487,18 @@ export async function validateAndConsumeCode(
 
 export async function cleanupExpiredCodes(db: D1Database): Promise<void> {
   const now = nowSec();
-  await db.prepare(
-    "DELETE FROM activation_codes WHERE card_type != 'permanent' AND activated_at IS NOT NULL AND expires_at > 0 AND expires_at < ?"
-  ).bind(now).run();
+  await db.prepare(`
+    DELETE FROM device_activations 
+    WHERE activation_code IN (
+      SELECT code FROM activation_codes 
+      WHERE card_type != 'permanent' AND activated_at IS NOT NULL 
+      AND expires_at > 0 AND expires_at < ?
+    )
+  `).bind(now).run();
+
+  await db.prepare(`
+    DELETE FROM activation_codes 
+    WHERE card_type != 'permanent' AND activated_at IS NOT NULL 
+    AND expires_at > 0 AND expires_at < ?
+  `).bind(now).run();
 }
