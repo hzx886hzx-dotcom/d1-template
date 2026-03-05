@@ -183,10 +183,12 @@ function shell(title: string, body: string, script: string) {
     .login-container { max-width: 400px; margin: 80px auto; }
     .login-header { margin-bottom: 24px; text-align: center; }
     .login-header h2 { margin-bottom: 8px; }
-    .login-form { display: flex; flex-direction: column; gap: 16px; }
+    .login-form { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+    .login-form > div { width: 100%; max-width: 320px; }
+    .login-form input { width: 100%; }
     .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; color: var(--text-secondary); }
     .checkbox-label input { width: 18px; height: 18px; margin: 0; }
-    .login-actions { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+    .login-actions { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 8px; width: 100%; }
     .search-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
     .search-bar input { flex: 1; min-width: 160px; }
     .search-bar .search-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -239,8 +241,55 @@ function shell(title: string, body: string, script: string) {
     .admin-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
     .admin-header h2 { margin: 0; }
     .admin-header .user-info { font-size: 14px; color: var(--text-secondary); }
+    
+    .top-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .top-nav h2 { margin: 0; font-size: 18px; }
+    .top-nav-right { display: flex; align-items: center; gap: 12px; }
+    .top-nav-right .user-info { font-size: 13px; color: var(--text-secondary); }
+    
+    .tab-nav {
+      display: flex;
+      gap: 4px;
+      padding: 8px 16px;
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tab-btn {
+      padding: 10px 20px;
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--text-secondary);
+      border: none;
+      box-shadow: none;
+      white-space: nowrap;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .tab-btn:hover { background: rgba(15, 118, 110, 0.08); }
+    .tab-btn.active { background: var(--brand); color: #fff; }
+    
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
     @media (max-width: 768px) {
-      .login-container { margin: 48px auto; padding: 0 16px; }
+      .login-container { margin: 48px 12px; padding: 0; width: auto; max-width: 100%; }
+      .login-form > div { max-width: 100%; }
+      .top-nav { flex-wrap: wrap; gap: 8px; padding: 12px; }
+      .top-nav h2 { font-size: 16px; }
+      .top-nav-right { width: 100%; justify-content: space-between; }
+      .tab-nav { padding: 8px 12px; width: 100%; }
+      .tab-btn { padding: 8px 16px; font-size: 13px; }
       .admin-header { flex-direction: column; align-items: flex-start; }
       .search-bar { flex-direction: column; width: 100%; }
       .search-bar input { width: 100%; }
@@ -369,19 +418,31 @@ export function renderAdminPage() {
   const activationModal = renderActivationModal();
 
   const body = `
-<div class="card admin-header">
+<div class="top-nav">
   <h2>SN 管理后台</h2>
-  <div class="row">
+  <div class="top-nav-right">
     <span id="me" class="user-info"></span>
-    <button id="logoutBtn" class="secondary">退出登录</button>
+    <button id="logoutBtn" class="secondary small">退出</button>
   </div>
 </div>
 
-${createCode.body}
+<div class="tab-nav">
+  <button class="tab-btn active" data-tab="create">创建激活码</button>
+  <button class="tab-btn" data-tab="devices">设备管理</button>
+  <button class="tab-btn" data-tab="codes">激活码列表</button>
+</div>
 
-${deviceList.body}
+<div id="tab-create" class="tab-content active">
+  ${createCode.body}
+</div>
 
-${activationList.body}
+<div id="tab-devices" class="tab-content">
+  ${deviceList.body}
+</div>
+
+<div id="tab-codes" class="tab-content">
+  ${activationList.body}
+</div>
 
 ${deviceModal.body}
 
@@ -419,6 +480,25 @@ ${activationModal.script}
 document.getElementById("logoutBtn").addEventListener("click", async function() { 
   await fetch("/web/logout", { method: "POST" }); 
   location.href = "/admin/login"; 
+});
+
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var tab = this.dataset.tab;
+    
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+      b.classList.remove('active');
+    });
+    this.classList.add('active');
+    
+    document.querySelectorAll('.tab-content').forEach(function(c) {
+      c.classList.remove('active');
+    });
+    document.getElementById('tab-' + tab).classList.add('active');
+    
+    if (tab === 'codes' && typeof loadList === 'function') loadList();
+    if (tab === 'devices' && typeof loadDevicesPage === 'function') loadDevicesPage();
+  });
 });
 
 ensureLogin();

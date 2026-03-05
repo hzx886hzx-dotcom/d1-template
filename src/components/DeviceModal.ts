@@ -42,15 +42,15 @@ async function openDeviceModal(code){
   try {
     const j = await api("/admin/activation-codes/" + encodeURIComponent(code) + "/usages");
     const rows = j.data || [];
-    deviceTbody.innerHTML = rows.length ? rows.map((x) => "<tr>"
-      + "<td class=\"mono\">" + esc(x.deviceId) + "</td>"
-      + "<td>" + esc(x.deviceName) + "</td>"
-      + "<td>" + esc(x.appVersion) + "</td>"
-      + "<td>" + esc(x.clientIp) + "</td>"
-      + "<td>" + fmtTs(x.firstSeenAt) + "</td>"
-      + "<td>" + fmtTs(x.lastSeenAt) + "</td>"
-      + "<td>" + esc(x.useCount) + "</td>"
-      + "</tr>").join("") : "<tr><td colspan='7'>暂无设备记录</td></tr>";
+    deviceTbody.innerHTML = rows.length ? rows.map((x) => '<tr>'
+      + '<td class="mono">' + esc(x.deviceId) + '</td>'
+      + '<td>' + esc(x.deviceName) + '</td>'
+      + '<td>' + esc(x.appVersion) + '</td>'
+      + '<td>' + esc(x.clientIp) + '</td>'
+      + '<td>' + fmtTs(x.firstSeenAt) + '</td>'
+      + '<td>' + fmtTs(x.lastSeenAt) + '</td>'
+      + '<td>' + esc(x.useCount) + '</td>'
+      + '</tr>').join("") : "<tr><td colspan='7'>暂无设备记录</td></tr>";
   } catch (e) {
     deviceTbody.innerHTML = "<tr><td colspan='7'>" + esc(String(e)) + "</td></tr>";
   }

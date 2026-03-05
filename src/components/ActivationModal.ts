@@ -55,7 +55,7 @@ async function openActivationModal(deviceId) {
     const j = await api("/admin/devices/" + encodeURIComponent(deviceId) + "/activations");
     const rows = j.data || [];
     
-    deviceActivationInfo.innerHTML = "设备: <span class=\"mono\">" + esc(deviceId) + "</span> | 激活记录: " + rows.length;
+    deviceActivationInfo.innerHTML = '设备: <span class="mono">' + esc(deviceId) + '</span> | 激活记录: ' + rows.length;
     
     deviceActivationTbody.innerHTML = rows.length ? rows.map((a) => {
       const status = a.isActive ? 
@@ -63,15 +63,15 @@ async function openActivationModal(deviceId) {
         '<span class="badge disabled">过期</span>';
       const cardTypeText = fmtCardType(a.cardType);
       
-      return "<tr>"
-        + "<td class=\"mono\">" + esc(a.activationCode) + "</td>"
-        + "<td>" + cardTypeText + "</td>"
-        + "<td>" + (a.activatedAt ? new Date(Number(a.activatedAt) * 1000).toLocaleString() : "-") + "</td>"
-        + "<td>" + (a.expiresAt ? new Date(Number(a.expiresAt) * 1000).toLocaleString() : (a.cardType === "permanent" ? "永久" : "-")) + "</td>"
-        + "<td>" + esc(a.renewalCount) + "</td>"
-        + "<td>" + status + "</td>"
-        + "<td><button data-act=\"renewDevice\" data-device=\"" + esc(deviceId) + "\" data-code=\"" + esc(a.activationCode) + "\" class=\"secondary small\">续期</button></td>"
-        + "</tr>";
+      return '<tr>'
+        + '<td class="mono">' + esc(a.activationCode) + '</td>'
+        + '<td>' + cardTypeText + '</td>'
+        + '<td>' + (a.activatedAt ? new Date(Number(a.activatedAt) * 1000).toLocaleString() : "-") + '</td>'
+        + '<td>' + (a.expiresAt ? new Date(Number(a.expiresAt) * 1000).toLocaleString() : (a.cardType === "permanent" ? "永久" : "-")) + '</td>'
+        + '<td>' + esc(a.renewalCount) + '</td>'
+        + '<td>' + status + '</td>'
+        + '<td><button data-act="renewDevice" data-device="' + esc(deviceId) + '" data-code="' + esc(a.activationCode) + '" class="secondary small">续期</button></td>'
+        + '</tr>';
     }).join("") : "<tr><td colspan='7'>暂无激活记录</td></tr>";
   } catch (e) {
     deviceActivationTbody.innerHTML = "<tr><td colspan='7'>" + esc(String(e)) + "</td></tr>";
