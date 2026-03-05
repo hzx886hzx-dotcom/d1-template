@@ -11,7 +11,13 @@
 		}
 	],
 	"observability": {
-		"enabled": true
+		"logs": {
+			"enabled": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": true
+		}
 	},
 	"vars": {
 		"SN_SIGN_FIXED": "bjx",
