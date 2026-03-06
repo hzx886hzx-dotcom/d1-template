@@ -184,6 +184,15 @@ export async function renewCode(db: D1Database, code: string, p: RenewCodeParams
   ).bind(code).first<ActivationCodeRow>();
   if (!record) return { ok: false, msg: "activation code not found" };
 
+  // 检查激活码是否已绑定设备
+  const existingBinding = await db.prepare(
+    "SELECT id FROM device_activations WHERE activation_code = ? AND is_active = 1 LIMIT 1"
+  ).bind(code).first<{ id: number }>();
+
+  if (existingBinding) {
+    return { ok: false, msg: "activation code is already bound to a device, please unbind first" };
+  }
+
   const days = Math.max(0, Number(p.addDays || 0));
   const uses = Math.max(0, Number(p.addUses || 0));
   if (days <= 0 && uses <= 0 && !p.reactivate) return { ok: false, msg: "nothing to renew" };
@@ -322,11 +331,11 @@ export async function validateAndConsumeCode(
 
   if (record.status !== "active") return { ok: false, msg: "activation code disabled" };
   if (isCodeExpired(record, now)) {
-    await db.prepare("DELETE FROM activation_codes WHERE code = ?").bind(code).run();
+    await db.batch([
+      db.prepare("DELETE FROM device_activations WHERE activation_code = ?").bind(code),
+      db.prepare("DELETE FROM activation_codes WHERE code = ?").bind(code),
+    ]);
     return { ok: false, msg: "activation code expired" };
-  }
-  if (Number(record.used_count || 0) >= Number(record.max_uses || 0)) {
-    return { ok: false, msg: "activation code usage limit reached" };
   }
 
   const existingActivationsResult = await db.prepare(`
@@ -408,6 +417,9 @@ export async function validateAndConsumeCode(
         db.prepare(
           "UPDATE activation_codes SET used_count = used_count + 1, last_used_at = ?, updated_at = ?, activated_at = COALESCE(activated_at, ?) WHERE code = ? AND status = 'active' AND used_count < max_uses"
         ).bind(now, now, now, code),
+        db.prepare(
+          "INSERT INTO device_activations (device_id, activation_code, activated_at, expires_at, is_active, renewal_count, use_count, updated_at) VALUES (?, ?, ?, ?, 1, 0, 1, ?)"
+        ).bind(currentDeviceId, code, now, renewedExpiresAt, now),
       ]);
 
       const updatedCode = await db.prepare(
@@ -423,7 +435,7 @@ export async function validateAndConsumeCode(
       return {
         ok: true,
         record: updatedCode || undefined,
-        deviceCount: deviceCount + 1,
+        deviceCount: deviceCount,
         renewed: true,
         previousExpiresAt: maxExpiresAt,
         newExpiresAt: renewedExpiresAt,
