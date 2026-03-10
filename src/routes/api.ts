@@ -10,15 +10,15 @@ const INTERNAL_STRATEGY = { take: 6, min: 0, max: 27, multiple: 1, lookback: 50 
 function executeInternalStrategy(payload: StrategyPayload) {
   type Color = "red" | "blue" | "green";
   const MAPPING: Record<number, Color> = {
-    0: "blue", 1: "red", 2: "red", 3: "blue", 4: "blue", 5: "red", 6: "red", 7: "red", 8: "green", 9: "red",
-    10: "red", 11: "blue", 12: "blue", 13: "red", 14: "red", 15: "blue", 16: "red", 17: "blue", 18: "red", 19: "green",
-    20: "blue", 21: "red", 22: "green", 23: "blue", 24: "blue", 25: "red", 26: "red", 27: "red", 28: "green", 29: "red",
-    30: "green", 31: "red", 32: "blue", 33: "red", 34: "green", 35: "green", 36: "blue", 37: "blue", 38: "red", 39: "red",
-    40: "blue", 41: "red", 42: "red", 43: "blue", 44: "blue", 45: "red", 46: "red", 47: "blue", 48: "red", 49: "red",
-    50: "blue", 51: "blue", 52: "red", 53: "red", 54: "blue", 55: "green", 56: "red", 57: "red", 58: "green", 59: "blue",
+    0: "blue", 1: "blue", 2: "red", 3: "red", 4: "blue", 5: "green", 6: "red", 7: "green", 8: "green", 9: "red",
+    10: "red", 11: "blue", 12: "blue", 13: "green", 14: "red", 15: "blue", 16: "blue", 17: "blue", 18: "red", 19: "green",
+    20: "red", 21: "red", 22: "green", 23: "blue", 24: "blue", 25: "green", 26: "red", 27: "red", 28: "green", 29: "red",
+    30: "green", 31: "green", 32: "blue", 33: "blue", 34: "green", 35: "green", 36: "blue", 37: "red", 38: "red", 39: "red",
+    40: "blue", 41: "red", 42: "red", 43: "blue", 44: "blue", 45: "green", 46: "red", 47: "blue", 48: "red", 49: "red",
+    50: "red", 51: "blue", 52: "blue", 53: "red", 54: "blue", 55: "green", 56: "red", 57: "red", 58: "green", 59: "blue",
     60: "red", 61: "red", 62: "red", 63: "red", 64: "green", 65: "green", 66: "red", 67: "green", 68: "red", 69: "blue",
     70: "red", 71: "green", 72: "red", 73: "red", 74: "green", 75: "red", 76: "blue", 77: "green", 78: "red", 79: "blue",
-    80: "blue", 81: "blue", 82: "red", 83: "red", 84: "blue", 85: "blue", 86: "green", 87: "red", 88: "red", 89: "blue",
+    80: "blue", 81: "blue", 82: "blue", 83: "red", 84: "red", 85: "blue", 86: "green", 87: "red", 88: "red", 89: "blue",
     90: "red", 91: "blue", 92: "red", 93: "red", 94: "green",
   };
   const blue = [3, 4, 9, 10, 14, 15, 20, 25, 26];
