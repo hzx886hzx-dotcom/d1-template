@@ -1,7 +1,7 @@
 ﻿import { renderAdminPage, renderLoginPage } from "./renderHtml";
 import { getConfig } from "./services/crypto";
 import { ensureSeedCode, cleanupExpiredCodes } from "./services/activationCode";
-import { handleVerify, handleGetScheme } from "./routes/api";
+import { handleVerify, handleGetScheme, handleGetAction } from "./routes/api";
 import {
   handleActivationCodesList,
   handleCodeUsages,
@@ -60,6 +60,10 @@ export default {
 
       if (method === "POST" && pathname === "/api/get_scheme") {
         return handleGetScheme(request, env.DB, cfg);
+      }
+
+      if (method === "POST" && pathname === "/api/get_action") {
+        return handleGetAction(request, env.DB, cfg);
       }
 
       if (method === "POST" && pathname === "/web/login") {

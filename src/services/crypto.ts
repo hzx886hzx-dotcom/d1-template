@@ -38,9 +38,9 @@ export async function getConfig(env: {
   const cached = (globalThis as unknown as { __configCache?: { key: string; value: RuntimeConfig } }).__configCache;
   if (cached && cached.key === cfgKey) return cached.value;
 
-  const aesKey = await fixedKey(String(env.SN_AES_KEY || "your-32-byte-aes-key-here"), 32);
-  const aesIv = await fixedKey(String(env.SN_AES_IV || "your-16-byte-iv-here"), 16);
-  const sm4Key = await fixedKey(String(env.SN_SM4_KEY || "your-sm4-key-here"), 16);
+  const aesKey = await fixedKey(String(env.SN_AES_KEY || "d3PpjjbIAJBJSdoY2_rgQ6P47sAXTDdanhOu0SCgxqA"), 32);
+  const aesIv = await fixedKey(String(env.SN_AES_IV || "2oKVSzpdw7KpEYziAah6sg"), 16);
+  const sm4Key = await fixedKey(String(env.SN_SM4_KEY || "-56LrICSuZ2iBLHHN5P705HFUIQ9dqVJ"), 16);
 
   const value: RuntimeConfig = {
     signFixed: String(env.SN_SIGN_FIXED || "bjx"),

@@ -3,7 +3,7 @@ import { checkCodeAvailableForScheme, getDeviceStatus } from "../services/device
 import { sm4Encrypt, sm4Decrypt, readExternalToken } from "../services/crypto";
 import { verifySign } from "../middleware/sign";
 import { parseRequestBody, buildUsageContext, normalizeCode, json, nowSec } from "../utils/helpers";
-import type { RuntimeConfig, StrategyPayload } from "../types";
+import type { Action, RuntimeConfig, StrategyPayload } from "../types";
 
 const INTERNAL_STRATEGY = { take: 6, min: 0, max: 27, multiple: 1, lookback: 50 };
 
@@ -64,29 +64,38 @@ const NUMBERS_BY_COLOR: Record<Color, number[]> = { red, blue, green };
 
 
 function executeInternalStrategy(payload: StrategyPayload) {
-  const num = Number(payload.period || 0);
-  const remainder = ((num % 95) + 95) % 95;
-  const predictedColor: Color = MAPPING[remainder] || "red";
-  const use = NUMBERS_BY_COLOR[predictedColor] || red;
+  const action = payload.action ?? 'traffic_light'
+  if (action === 'traffic_light') {
+    const num = Number(payload.period || 0);
+    const remainder = ((num % 95) + 95) % 95;
+    const predictedColor: Color = MAPPING[remainder] || "red";
+    const use = NUMBERS_BY_COLOR[predictedColor] || red;
+    return {
+      period: num,
+      numbers: use,
+      multiple: 1,
+    }
+  } else if (action === 'fixed_group') {
+    const num = payload?.history?.[0] as LotteryResult
+    if (num === null || num === undefined) {
+      return {
+        period: Number(payload.period || 0),
+        numbers: [],
+        multiple: 1,
+      };
+    }
+
+    return {
+      period: Number(payload.period || 0),
+      numbers: getNums(Number(num.zonghe_num || 0)),
+      multiple: 1,
+    };
+  }
   return {
-    period: num,
-    numbers: use,
+    period: Number(payload.period || 0),
+    numbers: [],
     multiple: 1,
   }
-  // const num = payload?.history?.[0] as LotteryResult
-  // if (num === null || num === undefined) {
-  //   return {
-  //     period: Number(payload.period || 0),
-  //     numbers: [],
-  //     multiple: 1,
-  //   };
-  // }
-
-  // return {
-  //   period: Number(payload.period || 0),
-  //   numbers: getNums(Number(num.zonghe_num || 0)),
-  //   multiple: 1,
-  // };
 }
 
 export async function handleVerify(
@@ -141,6 +150,34 @@ export async function handleVerify(
   });
 }
 
+export async function handleGetAction(request: Request,
+  db: D1Database,
+  cfg: RuntimeConfig
+): Promise<Response> {
+  const parsed = await parseRequestBody(request);
+  const guard = await verifySign(request, db, cfg, parsed.rawBody);
+  if (guard) return guard;
+  type Result = {
+    value: Action
+    label: String
+  }
+  const result = [
+    {
+      value: "traffic_light",
+      label: "红绿灯"
+    },
+    {
+      value: "fixed_group",
+      label: "定组"
+    }
+  ] as Array<Result>
+  return json(200, {
+    code: 200,
+    msg: "ok",
+    data: sm4Encrypt({ result }, cfg),
+  });
+}
+
 export async function handleGetScheme(
   request: Request,
   db: D1Database,
@@ -182,6 +219,7 @@ export async function handleGetScheme(
 
   try {
     const period = Number(decrypted.period || 0);
+    const action: Action = String(decrypted.action) as Action || 'traffic_light';
     const history = Array.isArray(decrypted.history) ? decrypted.history : [];
     const numberList = Array.isArray(decrypted.number_list)
       ? decrypted.number_list
@@ -190,6 +228,7 @@ export async function handleGetScheme(
     const strategy = executeInternalStrategy({
       period,
       history,
+      action,
       number_list: numberList,
       token_sn: payload.sn,
       device: { ...usage, ...(typeof decrypted.device === "object" ? (decrypted.device as Record<string, unknown>) : {}) },

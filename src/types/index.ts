@@ -1,11 +1,15 @@
 export type Json = Record<string, unknown>;
 
+export type Action = "traffic_light" | "fixed_group"
+
+
 export type StrategyPayload = {
   period?: number;
   history?: unknown[];
   number_list?: unknown[];
   token_sn?: string;
   device?: Record<string, unknown>;
+  action?: Action
 };
 
 export type InternalStrategyConfig = {
