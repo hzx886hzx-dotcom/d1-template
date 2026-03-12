@@ -44,42 +44,49 @@ function getNums(num: number) {
   return result.filter(i => i > 13 || (i % 2 === 0))
 }
 
-function executeInternalStrategy(payload: StrategyPayload) {
-  // type Color = "red" | "blue" | "green";
-  // const MAPPING: Record<number, Color> = {
-  //   0: "blue", 1: "red", 2: "blue", 3: "blue", 4: "blue", 5: "green", 6: "red", 7: "blue", 8: "blue", 9: "red",
-  //   10: "red", 11: "red", 12: "red", 13: "blue", 14: "red", 15: "green", 16: "red", 17: "blue", 18: "red", 19: "blue",
-  //   20: "red", 21: "red", 22: "blue", 23: "blue", 24: "green", 25: "red", 26: "red", 27: "red", 28: "green", 29: "red",
-  //   30: "green", 31: "green", 32: "red", 33: "blue", 34: "blue", 35: "red", 36: "red", 37: "blue", 38: "blue", 39: "red",
-  //   40: "red", 41: "red", 42: "red", 43: "blue", 44: "blue", 45: "green", 46: "red", 47: "red", 48: "blue", 49: "red",
-  //   50: "red", 51: "red", 52: "blue", 53: "red", 54: "blue", 55: "blue", 56: "red", 57: "red", 58: "red", 59: "blue",
-  //   60: "green", 61: "blue", 62: "red", 63: "red", 64: "red", 65: "green", 66: "blue", 67: "green", 68: "red", 69: "blue",
-  //   70: "blue", 71: "green", 72: "red", 73: "red", 74: "blue", 75: "red", 76: "red", 77: "red", 78: "red", 79: "blue",
-  //   80: "blue", 81: "blue", 82: "blue", 83: "red", 84: "red", 85: "blue", 86: "blue", 87: "green", 88: "red", 89: "blue",
-  //   90: "red", 91: "blue", 92: "red", 93: "red", 94: "green",
-  // };
-  // const blue = [3, 4, 9, 10, 14, 15, 20, 25, 26];
-  // const green = [5, 6, 11, 16, 17, 21, 22, 27];
-  // const red = [1, 2, 7, 8, 12, 13, 18, 19, 23, 24];
-  // const NUMBERS_BY_COLOR: Record<Color, number[]> = { red, blue, green };
-  // const num = Number(payload.period || 0);
-  // const remainder = ((num % 95) + 95) % 95;
-  // const predictedColor: Color = MAPPING[remainder] || "red";
-  // const use = NUMBERS_BY_COLOR[predictedColor] || red;
-  const num = payload?.history?.[0] as LotteryResult
-  if (num === null || num === undefined) {
-    return {
-      period: Number(payload.period || 0),
-      numbers: [],
-      multiple: 1,
-    };
-  }
+type Color = "red" | "blue" | "green";
+const MAPPING: Record<number, Color> = {
+  0: "blue", 1: "red", 2: "blue", 3: "blue", 4: "blue", 5: "green", 6: "red", 7: "blue", 8: "blue", 9: "red",
+  10: "red", 11: "red", 12: "red", 13: "blue", 14: "red", 15: "green", 16: "red", 17: "blue", 18: "red", 19: "blue",
+  20: "red", 21: "red", 22: "blue", 23: "blue", 24: "green", 25: "red", 26: "red", 27: "red", 28: "green", 29: "red",
+  30: "green", 31: "green", 32: "red", 33: "blue", 34: "blue", 35: "red", 36: "red", 37: "blue", 38: "blue", 39: "red",
+  40: "red", 41: "red", 42: "red", 43: "blue", 44: "blue", 45: "green", 46: "red", 47: "red", 48: "blue", 49: "red",
+  50: "red", 51: "red", 52: "blue", 53: "red", 54: "blue", 55: "blue", 56: "red", 57: "red", 58: "red", 59: "blue",
+  60: "green", 61: "blue", 62: "red", 63: "red", 64: "red", 65: "green", 66: "blue", 67: "green", 68: "red", 69: "blue",
+  70: "blue", 71: "green", 72: "red", 73: "red", 74: "blue", 75: "red", 76: "red", 77: "red", 78: "red", 79: "blue",
+  80: "blue", 81: "blue", 82: "blue", 83: "red", 84: "red", 85: "blue", 86: "blue", 87: "green", 88: "red", 89: "blue",
+  90: "red", 91: "blue", 92: "red", 93: "red", 94: "green",
+};
+const blue = [3, 4, 9, 10, 14, 15, 20, 25, 26];
+const green = [5, 6, 11, 16, 17, 21, 22, 27];
+const red = [1, 2, 7, 8, 12, 13, 18, 19, 23, 24];
+const NUMBERS_BY_COLOR: Record<Color, number[]> = { red, blue, green };
 
+
+function executeInternalStrategy(payload: StrategyPayload) {
+  const num = Number(payload.period || 0);
+  const remainder = ((num % 95) + 95) % 95;
+  const predictedColor: Color = MAPPING[remainder] || "red";
+  const use = NUMBERS_BY_COLOR[predictedColor] || red;
   return {
-    period: Number(payload.period || 0),
-    numbers: getNums(Number(num.zonghe_num || 0)),
+    period: num,
+    numbers: use,
     multiple: 1,
-  };
+  }
+  // const num = payload?.history?.[0] as LotteryResult
+  // if (num === null || num === undefined) {
+  //   return {
+  //     period: Number(payload.period || 0),
+  //     numbers: [],
+  //     multiple: 1,
+  //   };
+  // }
+
+  // return {
+  //   period: Number(payload.period || 0),
+  //   numbers: getNums(Number(num.zonghe_num || 0)),
+  //   multiple: 1,
+  // };
 }
 
 export async function handleVerify(
