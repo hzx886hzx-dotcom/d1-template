@@ -219,7 +219,7 @@ export async function handleGetScheme(
 
   try {
     const period = Number(decrypted.period || 0);
-    const action: Action = String(decrypted.action) as Action || 'traffic_light';
+    const action = (decrypted.action || 'traffic_light') as Action;
     const history = Array.isArray(decrypted.history) ? decrypted.history : [];
     const numberList = Array.isArray(decrypted.number_list)
       ? decrypted.number_list
