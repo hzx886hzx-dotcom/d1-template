@@ -82,7 +82,7 @@ function linkageKongSolid(num: number) {
     return [7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
   }
   if (num === 11) {
-    return [7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    return [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
   }
   if (num === 12) {
     return [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
