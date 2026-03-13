@@ -62,6 +62,58 @@ const green = [5, 6, 11, 16, 17, 21, 22, 27];
 const red = [1, 2, 7, 8, 12, 13, 18, 19, 23, 24];
 const NUMBERS_BY_COLOR: Record<Color, number[]> = { red, blue, green };
 
+function linkageKongSolid(num: number) {
+  if (num < 7) {
+    return [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+  }
+  if (num > 20) {
+    return [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+  }
+  if (num === 7) {
+    return [7, 8, 9, 10, 11, 12, 13, 14, 15]
+  }
+  if (num === 8) {
+    return [7, 8, 9, 10, 11, 12, 13, 14, 15]
+  }
+  if (num === 9) {
+    return [7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+  }
+  if (num === 10) {
+    return [7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+  }
+  if (num === 11) {
+    return [7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+  }
+  if (num === 12) {
+    return [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+  }
+  if (num === 13) {
+    return [9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+  }
+  if (num === 14) {
+    return [10, 11, 12, 13, 14, 15, 16, 17, 18]
+  }
+  if (num === 15) {
+    return [11, 12, 13, 14, 15, 16, 17, 18, 19]
+  }
+  if (num === 16) {
+    return [11, 12, 13, 14, 15, 16, 17, 18, 19]
+  }
+  if (num === 17) {
+    return [12, 13, 14, 15, 16, 17, 18, 19, 20]
+  }
+  if (num === 18) {
+    return [12, 13, 14, 15, 16, 17, 18, 19]
+  }
+  if (num === 19) {
+    return [11, 12, 13, 14, 15, 16, 17, 18, 19]
+  }
+  if (num === 20) {
+    return [13, 14, 15, 16, 17, 18, 19]
+  }
+  return [13, 14, 15, 16, 17, 18, 19]
+}
+
 
 function executeInternalStrategy(payload: StrategyPayload) {
   const action = payload.action ?? 'traffic_light'
@@ -75,7 +127,22 @@ function executeInternalStrategy(payload: StrategyPayload) {
       numbers: use,
       multiple: 1,
     }
-  } else if (action === 'fixed_group') {
+  } else if (action === 'linkage_kong_solid_group') {
+    const num = payload?.history?.[0] as LotteryResult
+    if (num === null || num === undefined) {
+      return {
+        period: Number(payload.period || 0),
+        numbers: [],
+        multiple: 1,
+      };
+    }
+    return {
+      period: Number(payload.period || 0),
+      numbers: linkageKongSolid(Number(num.zonghe_num || 0)),
+      multiple: 1,
+    };
+  }
+  else if (action === 'fixed_group') {
     const num = payload?.history?.[0] as LotteryResult
     if (num === null || num === undefined) {
       return {
@@ -169,6 +236,10 @@ export async function handleGetAction(request: Request,
     {
       value: "fixed_group",
       label: "定组"
+    },
+    {
+      value: "linkage_kong_solid_group",
+      label: "固组-联动"
     }
   ] as Array<Result>
   return json(200, {

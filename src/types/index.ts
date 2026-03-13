@@ -1,6 +1,6 @@
 export type Json = Record<string, unknown>;
 
-export type Action = "traffic_light" | "fixed_group"
+export type Action = "traffic_light" | "fixed_group" | "linkage_kong_solid_group"
 
 
 export type StrategyPayload = {
