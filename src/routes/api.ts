@@ -4,9 +4,8 @@ import {
 } from "../services/activationCode";
 import {
   checkCodeAvailableForScheme,
-  getDeviceStatus,
 } from "../services/device";
-import { sm4Encrypt, sm4Decrypt, readExternalToken } from "../services/crypto";
+import { sm4Encrypt, readExternalToken } from "../services/crypto";
 import { verifySign } from "../middleware/sign";
 import {
   parseRequestBody,
@@ -16,14 +15,6 @@ import {
   nowSec,
 } from "../utils/helpers";
 import type { Action, RuntimeConfig, StrategyPayload } from "../types";
-
-const INTERNAL_STRATEGY = {
-  take: 6,
-  min: 0,
-  max: 27,
-  multiple: 1,
-  lookback: 50,
-};
 
 interface LotteryResult {
   period: number;
@@ -220,34 +211,116 @@ function linkageKongSolid(num: number) {
 type OpenMap = Record<number, number[]>;
 
 const openMap: OpenMap = {
-  0: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  1: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  2: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  3: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  4: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27],
-  5: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  6: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  7: [0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  8: [0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 23, 24, 25, 26, 27],
-  9: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  10: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 26, 27],
-  11: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 26, 27],
-  12: [0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 26, 27],
-  13: [0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25, 26, 27],
-  14: [0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25, 26, 27],
-  15: [0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 26, 27],
-  16: [0, 1, 2, 3, 4, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25, 26, 27],
-  17: [0, 1, 2, 3, 4, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27],
-  18: [0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25, 26, 27],
-  19: [0, 1, 2, 3, 4, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
-  20: [0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27],
-  21: [0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
-  22: [0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
-  23: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  24: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  25: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  26: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
-  27: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27],
+  0: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  1: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  2: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  3: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  4: [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26,
+    27,
+  ],
+  5: [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25,
+    26, 27,
+  ],
+  6: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  7: [
+    0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27,
+  ],
+  8: [
+    0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 23, 24, 25,
+    26, 27,
+  ],
+  9: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  10: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25,
+    26, 27,
+  ],
+  11: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25,
+    26, 27,
+  ],
+  12: [
+    0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 26, 27,
+  ],
+  13: [
+    0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25, 26,
+    27,
+  ],
+  14: [
+    0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25,
+    26, 27,
+  ],
+  15: [
+    0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 26,
+    27,
+  ],
+  16: [
+    0, 1, 2, 3, 4, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25,
+    26, 27,
+  ],
+  17: [
+    0, 1, 2, 3, 4, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26,
+    27,
+  ],
+  18: [
+    0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25,
+    26, 27,
+  ],
+  19: [
+    0, 1, 2, 3, 4, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+    27,
+  ],
+  20: [
+    0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25,
+    26, 27,
+  ],
+  21: [
+    0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+    25, 26, 27,
+  ],
+  22: [
+    0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+    25, 26, 27,
+  ],
+  23: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  24: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  25: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  26: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
+  27: [
+    0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 23, 24, 25, 26,
+    27,
+  ],
 };
 
 function executeInternalStrategy(payload: StrategyPayload) {
@@ -405,7 +478,7 @@ export async function handleGetAction(
   return json(200, {
     code: 200,
     msg: "ok",
-    data: sm4Encrypt({ result }, cfg),
+    data: { result },
   });
 }
 
@@ -442,24 +515,7 @@ export async function handleGetScheme(
     return json(401, { code: 401, msg: activeCheck.msg });
   }
 
-  const encrypted = typeof body.data === "string" ? body.data : "";
-  if (!encrypted)
-    return json(400, {
-      code: 400,
-      msg: "body.data (sm4 encrypted) is required",
-    });
-
-  let decrypted: Record<string, unknown>;
-  try {
-    const out = sm4Decrypt(encrypted, cfg);
-    if (!out || typeof out !== "object")
-      return json(400, { code: 400, msg: "decrypted payload must be object" });
-    decrypted = out as Record<string, unknown>;
-  } catch {
-    return json(400, { code: 400, msg: "invalid sm4 payload" });
-  }
-
-  if (decrypted.period === undefined) {
+  if (body.period === undefined) {
     return json(400, {
       code: 400,
       msg: "decrypted payload must contain period/history",
@@ -467,11 +523,11 @@ export async function handleGetScheme(
   }
 
   try {
-    const period = Number(decrypted.period || 0);
-    const action = (decrypted.action || "traffic_light") as Action;
-    const history = Array.isArray(decrypted.history) ? decrypted.history : [];
-    const numberList = Array.isArray(decrypted.number_list)
-      ? decrypted.number_list
+    const period = Number(body.period || 0);
+    const action = (body.action || "traffic_light") as Action;
+    const history = Array.isArray(body.history) ? body.history : [];
+    const numberList = Array.isArray(body.number_list)
+      ? body.number_list
       : history.map((x) =>
           Number(((x as Record<string, unknown>)?.sum as number) || 0),
         );
@@ -484,8 +540,8 @@ export async function handleGetScheme(
       token_sn: payload.sn,
       device: {
         ...usage,
-        ...(typeof decrypted.device === "object"
-          ? (decrypted.device as Record<string, unknown>)
+        ...(typeof body.device === "object"
+          ? (body.device as Record<string, unknown>)
           : {}),
       },
     });
@@ -493,10 +549,7 @@ export async function handleGetScheme(
     return json(200, {
       code: 200,
       msg: "ok",
-      data: sm4Encrypt(
-        { period, numbers: strategy.numbers, multiple: strategy.multiple },
-        cfg,
-      ),
+      data: { period, numbers: strategy.numbers, multiple: strategy.multiple },
     });
   } catch (err) {
     return json(500, {
