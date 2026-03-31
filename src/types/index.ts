@@ -1,7 +1,10 @@
 export type Json = Record<string, unknown>;
 
-export type Action = "traffic_light" | "fixed_group" | "linkage_kong_solid_group"
-
+export type Action =
+  | "traffic_light"
+  | "fixed_group"
+  | "linkage_kong_solid_group"
+  | "max_fixed_solid_group";
 
 export type StrategyPayload = {
   period?: number;
@@ -9,7 +12,7 @@ export type StrategyPayload = {
   number_list?: unknown[];
   token_sn?: string;
   device?: Record<string, unknown>;
-  action?: Action
+  action?: Action;
 };
 
 export type InternalStrategyConfig = {
