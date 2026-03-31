@@ -2,9 +2,7 @@ import {
   validateAndConsumeCode,
   cleanupExpiredCodes,
 } from "../services/activationCode";
-import {
-  checkCodeAvailableForScheme,
-} from "../services/device";
+import { checkCodeAvailableForScheme } from "../services/device";
 import { sm4Encrypt, readExternalToken } from "../services/crypto";
 import { verifySign } from "../middleware/sign";
 import {
@@ -269,10 +267,7 @@ const openMap: OpenMap = {
     0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25,
     26, 27,
   ],
-  15: [
-    0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 26,
-    27,
-  ],
+  15: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
   16: [
     0, 1, 2, 3, 4, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25,
     26, 27,
@@ -285,10 +280,7 @@ const openMap: OpenMap = {
     0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25,
     26, 27,
   ],
-  19: [
-    0, 1, 2, 3, 4, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27,
-  ],
+  19: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
   20: [
     0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25,
     26, 27,
