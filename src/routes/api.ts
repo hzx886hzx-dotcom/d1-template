@@ -371,6 +371,53 @@ function executeInternalStrategy(payload: StrategyPayload) {
       numbers: openMap[Number(num.zonghe_num || 0)],
       multiple: 1,
     };
+  } else if (action === "min_double_kill") {
+    const num = payload?.history?.[0] as LotteryResult;
+    const num1 = payload?.history?.[1] as LotteryResult;
+    const num2 = payload?.history?.[2] as LotteryResult;
+    if (num === null || num === undefined) {
+      return {
+        period: Number(payload.period || 0),
+        numbers: [],
+        multiple: 1,
+      };
+    }
+    function compareOddEven(arr: Array<number>) {
+      let evenCount = 0;
+
+      for (let num of arr) {
+        if (num % 2 === 0) {
+          evenCount++;
+        }
+      }
+
+      const oddCount = arr.length - evenCount;
+
+      if (evenCount > oddCount) {
+        return Array.from({ length: 28 }, (_, i) => i).filter(
+          (i) => i % 2 === 0,
+        );
+      } else if (evenCount < oddCount) {
+        return Array.from({ length: 28 }, (_, i) => i).filter(
+          (i) => i % 2 !== 0,
+        );
+      } else {
+        return [10, 11, 12, 13, 14, 15, 16, 17];
+      }
+    }
+    const mid2 = num1.second_num;
+    const th1 = (num.first_num + mid2) % 10;
+    const th2 = (num.first_num + mid2) % 10;
+    const fi1 = (num2.third_num + mid2) % 10;
+    const fi2 = (num2.third_num + mid2) % 10;
+
+    const arr = [th1, th2, fi1, fi2];
+
+    return {
+      period: Number(payload.period || 0),
+      numbers: compareOddEven(arr),
+      multiple: 1,
+    };
   }
   return {
     period: Number(payload.period || 0),
@@ -465,6 +512,10 @@ export async function handleGetAction(
     {
       value: "max_fixed_solid_group",
       label: "高-定-联动",
+    },
+    {
+      value: "min_double_kill",
+      label: "混合双打",
     },
   ] as Array<Result>;
   return json(200, {

@@ -4,7 +4,8 @@ export type Action =
   | "traffic_light"
   | "fixed_group"
   | "linkage_kong_solid_group"
-  | "max_fixed_solid_group";
+  | "max_fixed_solid_group"
+  | "min_double_kill";
 
 export type StrategyPayload = {
   period?: number;
